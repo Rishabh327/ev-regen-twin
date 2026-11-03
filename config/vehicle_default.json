@@ -1,0 +1,121 @@
+{
+  "_comment": "Default parameters for a compact Indian EV (similar CLASS to a Tata Nexon EV). ALL values are ASSUMED, textbook-realistic values chosen for teaching - they are NOT official manufacturer data.",
+
+  "vehicle": {
+    "name": "Compact Indian EV (assumed parameters)",
+    "curb_mass_kg": 1400.0,
+    "driver_mass_kg": 75.0,
+    "payload_kg": 0.0,
+    "rotational_mass_factor": 1.05,
+    "drag_coefficient": 0.33,
+    "frontal_area_m2": 2.3,
+    "rolling_resistance_coeff": 0.010,
+    "wheel_radius_m": 0.32,
+    "gear_ratio": 9.0,
+    "drivetrain_efficiency": 0.97,
+    "aux_power_w": 400.0,
+    "air_density_kg_m3": 1.2,
+    "gravity_m_s2": 9.81
+  },
+
+  "motor": {
+    "peak_power_kw": 105.0,
+    "peak_torque_nm": 250.0,
+    "max_speed_rpm": 12000.0,
+    "loss_copper_coeff_w_per_nm2": 0.05,
+    "loss_iron_coeff_w_per_rad_s": 1.5,
+    "loss_windage_coeff_w_per_rad3_s3": 2.0e-7,
+    "loss_constant_w": 300.0,
+    "min_efficiency": 0.55,
+    "max_efficiency": 0.97
+  },
+
+  "battery": {
+    "chemistry": "NMC",
+    "capacity_kwh": 30.0,
+    "nominal_voltage_v": 320.0,
+    "r0_ohm": 0.09,
+    "r1_ohm": 0.04,
+    "c1_farad": 2000.0,
+    "charge_efficiency": 0.98,
+    "max_discharge_power_kw": 120.0,
+    "max_charge_power_kw": 45.0,
+    "usable_soc_window": 0.92,
+    "r0_temp_coeff_per_c": 0.025,
+    "soc_taper": {
+      "soc_pct": [0.0, 90.0, 95.0, 98.0, 100.0],
+      "factor":  [1.0, 1.0, 0.35, 0.02, 0.0]
+    },
+    "temp_derate": {
+      "temp_c": [-20.0, 0.0, 10.0, 15.0, 40.0, 50.0, 60.0],
+      "factor": [0.05, 0.20, 0.60, 1.00, 1.00, 0.50, 0.20]
+    },
+    "ocv_tables": {
+      "NMC": {
+        "cell_nominal_v": 3.68,
+        "soc_pct": [0, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 100],
+        "cell_ocv_v": [3.00, 3.30, 3.45, 3.55, 3.62, 3.68, 3.74, 3.82, 3.90, 3.98, 4.08, 4.14, 4.20]
+      },
+      "LFP": {
+        "cell_nominal_v": 3.20,
+        "soc_pct": [0, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 100],
+        "cell_ocv_v": [2.50, 3.00, 3.15, 3.22, 3.25, 3.27, 3.29, 3.30, 3.31, 3.32, 3.34, 3.38, 3.60]
+      }
+    }
+  },
+
+  "regen": {
+    "version": "1.0.0",
+    "strategy": "series",
+    "parallel_ratio": 0.30,
+    "regen_level": "High",
+    "fade_start_kmh": 10.0,
+    "fade_end_kmh": 5.0,
+    "max_regen_power_kw": 70.0,
+    "levels": {
+      "Off":       {"max_decel_mps2": 0.0},
+      "Low":       {"max_decel_mps2": 0.5},
+      "Medium":    {"max_decel_mps2": 1.0},
+      "High":      {"max_decel_mps2": 1.6},
+      "One-pedal": {"max_decel_mps2": 2.5, "fade_start_kmh": 6.0, "fade_end_kmh": 2.0}
+    }
+  },
+
+  "simulation": {
+    "dt_s": 1.0,
+    "initial_soc_pct": 90.0,
+    "ambient_temp_c": 25.0,
+    "road_grade_pct": 0.0
+  },
+
+  "ota_limits": {
+    "allowed_strategies": ["friction_only", "series", "parallel", "levels"],
+    "parallel_ratio": [0.0, 1.0],
+    "fade_start_kmh": [2.0, 25.0],
+    "fade_end_kmh": [0.0, 20.0],
+    "max_regen_power_kw": [0.0, 105.0],
+    "max_safe_regen_decel_mps2": 3.0
+  },
+
+  "twin": {
+    "mass_mismatch_pct": 5.0,
+    "r0_mismatch_pct": 10.0,
+    "initial_soc_error_pct": 2.0,
+    "soc_noise_std_pct": 0.3,
+    "current_noise_std_a": 1.5,
+    "voltage_noise_std_v": 0.5,
+    "sync_period_s": 10,
+    "process_noise_std_pct_per_s": 0.02,
+    "random_seed": 42
+  },
+
+  "sanity": {
+    "stop_go_mean_speed_kmh": 20.0,
+    "stop_go_regen_share_pct": [20.0, 45.0],
+    "city_mean_speed_kmh": 40.0,
+    "city_regen_share_pct": [10.0, 30.0],
+    "highway_regen_share_pct": [5.0, 15.0],
+    "wh_per_km": [90.0, 200.0],
+    "far_outside_factor": 0.5
+  }
+}
