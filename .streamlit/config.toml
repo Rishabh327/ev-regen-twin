@@ -1,0 +1,24 @@
+[theme]
+base = "dark"
+primaryColor = "#FFB020"
+backgroundColor = "#0A0E14"
+secondaryBackgroundColor = "#111824"
+textColor = "#E7ECF3"
+borderColor = "#22304A"
+linkColor = "#38BDF8"
+font = "'IBM Plex Sans':https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+headingFont = "'Space Grotesk':https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap"
+codeFont = "'JetBrains Mono':https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap"
+baseRadius = "10px"
+showWidgetBorder = true
+chartCategoricalColors = ["#2EE59D", "#FF5D5D", "#38BDF8", "#FFB020", "#B18CFF", "#8A97AB"]
+
+[theme.sidebar]
+backgroundColor = "#0D131D"
+secondaryBackgroundColor = "#162031"
+
+[server]
+runOnSave = false
+
+[browser]
+gatherUsageStats = false

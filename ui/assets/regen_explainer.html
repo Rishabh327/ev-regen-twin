@@ -1,0 +1,166 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#0A0E14;--panel:#111824;--panel2:#162031;--line:#22304A;--text:#E7ECF3;--muted:#8A97AB;
+  --regen:#2EE59D;--fric:#FF5D5D;--drive:#38BDF8;--volt:#FFB020;--mono:'JetBrains Mono',monospace;--head:'Space Grotesk',sans-serif}
+*{box-sizing:border-box}
+html,body{margin:0;background:transparent;color:var(--text);font-family:'IBM Plex Sans',system-ui,sans-serif}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr)}
+@media(max-width:760px){.grid{grid-template-columns:1fr}}
+.stage{background:radial-gradient(500px 220px at 50% 60%,rgba(56,189,248,.07),transparent),#0d1420;border-right:1px solid var(--line)}
+svg{display:block;width:100%;height:auto}
+.txt{padding:20px 22px;display:flex;flex-direction:column;gap:10px}
+.k{font:600 .72rem var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--c)}
+h2{font:700 1.5rem/1.15 var(--head);margin:0}
+p{margin:0;color:#c3ccd8;line-height:1.5;font-size:.95rem}
+.path{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font:600 .78rem var(--mono)}
+.path span{border:1px solid var(--c);color:var(--c);border-radius:999px;padding:4px 10px}
+.path i{color:var(--muted);font-style:normal}
+.eq{font:.85rem var(--mono);background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 12px;color:var(--text)}
+.fact{font-size:.82rem;color:var(--muted)}
+.fact b{color:var(--c)}
+.nav{display:flex;gap:6px;padding:12px 14px;border-top:1px solid var(--line);align-items:center;flex-wrap:wrap}
+.nav button{font:600 .78rem var(--mono);color:var(--text);background:var(--panel2);border:1px solid var(--line);border-radius:10px;
+  padding:8px 12px;cursor:pointer;position:relative;overflow:hidden}
+.nav button.on{border-color:var(--c);color:var(--c)}
+.nav button .bar{position:absolute;left:0;bottom:0;height:3px;background:var(--c);width:0}
+.nav button.on .bar{animation:fill var(--dur) linear forwards}
+.nav .sp{flex:1}
+@keyframes fill{to{width:100%}}
+.fade{animation:fade .5s ease-out both}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}}
+
+/* ---- scene machinery ---- */
+.flow{fill:none;stroke-width:9;stroke-linecap:round;stroke-dasharray:2 16;opacity:0;transition:opacity .4s,stroke .4s}
+.flow.fwd{animation:fwd .7s linear infinite}.flow.rev{animation:rev .7s linear infinite}
+@keyframes fwd{to{stroke-dashoffset:-18}}@keyframes rev{to{stroke-dashoffset:18}}
+.wheel{transform-box:fill-box;transform-origin:center;animation:spin var(--spin,1s) linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.lvl{transform-box:fill-box;transform-origin:bottom}
+.s-drive .lvl{animation:drain 6s ease-in-out both}
+.s-regen .lvl{animation:charge 6s ease-in-out both}
+.s-blend .lvl{animation:charge2 6s ease-in-out both}
+.s-friction .lvl{transform:scaleY(.6)}
+@keyframes drain{from{transform:scaleY(.8)}to{transform:scaleY(.55)}}
+@keyframes charge{from{transform:scaleY(.55)}to{transform:scaleY(.78)}}
+@keyframes charge2{from{transform:scaleY(.55)}to{transform:scaleY(.68)}}
+.heatw{fill:none;stroke:var(--fric);stroke-width:3;stroke-linecap:round;opacity:0}
+.s-friction .heatw,.s-blend .heatw{animation:rise 1.4s ease-out infinite}
+.heatw:nth-of-type(2){animation-delay:.45s!important}.heatw:nth-of-type(3){animation-delay:.9s!important}
+@keyframes rise{0%{opacity:0;transform:translateY(0)}30%{opacity:.9}100%{opacity:0;transform:translateY(-34px)}}
+.pad{fill:#3a4b66;transition:fill .4s}
+.s-friction .pad,.s-blend .pad{fill:var(--fric);filter:url(#g)}
+.disc{transition:fill .4s}
+.s-friction .disc{fill:rgba(255,93,93,.35)}.s-blend .disc{fill:rgba(255,93,93,.18)}
+.mlab{transition:opacity .3s}
+.car{animation:roll 6s ease-in-out both}
+.s-drive .car{animation-name:go}.s-regen .car,.s-friction .car,.s-blend .car{animation-name:stop}
+@keyframes go{from{transform:translateX(-30px)}to{transform:translateX(30px)}}
+@keyframes stop{from{transform:translateX(-30px)}to{transform:translateX(20px)}}
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="grid">
+    <div class="stage">
+      <svg viewBox="0 0 640 300" id="sv">
+        <defs><filter id="g" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+        <!-- battery -->
+        <rect x="34" y="78" width="112" height="132" rx="14" fill="#0a0e14" stroke="#3a4b66" stroke-width="3"/>
+        <rect x="70" y="68" width="40" height="10" rx="3" fill="#3a4b66"/>
+        <g class="lvl"><rect id="lv" x="44" y="88" width="92" height="112" rx="8" fill="#FFB020"/></g>
+        <text x="90" y="235" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#8A97AB">BATTERY</text>
+        <!-- motor -->
+        <circle cx="320" cy="144" r="46" fill="#162031" stroke="#38BDF8" stroke-width="3" id="mc"/>
+        <text class="mlab" id="mM" x="320" y="154" text-anchor="middle" font-family="Space Grotesk" font-weight="700" font-size="30" fill="#38BDF8">M</text>
+        <text class="mlab" id="mG" x="320" y="154" text-anchor="middle" font-family="Space Grotesk" font-weight="700" font-size="30" fill="#2EE59D" opacity="0">G</text>
+        <text x="320" y="214" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#8A97AB" id="mt">MOTOR</text>
+        <!-- links -->
+        <path d="M146 144 H274" stroke="#22304A" stroke-width="14" stroke-linecap="round"/>
+        <path d="M366 144 H468" stroke="#22304A" stroke-width="14" stroke-linecap="round"/>
+        <path id="f1" class="flow" d="M146 144 H274"/>
+        <path id="f2" class="flow" d="M366 144 H468"/>
+        <text id="l1" x="210" y="128" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#8A97AB">electricity</text>
+        <text id="l2" x="417" y="128" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#8A97AB">torque</text>
+        <!-- wheel + brake -->
+        <g class="car">
+          <circle class="disc" cx="540" cy="144" r="66" fill="transparent"/>
+          <g class="wheel"><circle cx="540" cy="144" r="62" fill="#0a0e14" stroke="#c9d3e0" stroke-width="8"/>
+            <path d="M540 92 V196 M488 144 H592 M503 107 L577 181 M577 107 L503 181" stroke="#8A97AB" stroke-width="4"/>
+            <circle cx="540" cy="144" r="12" fill="#c9d3e0"/></g>
+          <rect class="pad" x="586" y="112" width="14" height="64" rx="5"/>
+          <path class="heatw" d="M596 96 q6 -8 0 -16 q-6 -8 0 -16"/>
+          <path class="heatw" d="M612 100 q6 -8 0 -16 q-6 -8 0 -16"/>
+          <path class="heatw" d="M580 100 q6 -8 0 -16 q-6 -8 0 -16"/>
+        </g>
+        <text x="540" y="235" text-anchor="middle" font-family="JetBrains Mono" font-size="13" fill="#8A97AB">WHEEL + BRAKE PAD</text>
+        <rect x="0" y="262" width="640" height="3" fill="#22304A"/>
+        <text id="cap" x="320" y="288" text-anchor="middle" font-family="JetBrains Mono" font-size="12" fill="#8A97AB"></text>
+      </svg>
+    </div>
+    <div class="txt" id="txt"></div>
+  </div>
+  <div class="nav" id="nav"><span class="sp"></span><button id="pp">⏸ auto</button></div>
+</div>
+<script>
+const S = [
+  {key: "drive", c: "#38BDF8", tag: "Step 1 · Accelerating", title: "The battery pushes the car",
+   text: "The battery sends DC power to the inverter, which drives the electric motor. The motor turns the wheels and the car speeds up. Battery level goes down.",
+   path: ["Battery", "Inverter + motor", "Wheels"], eq: "P_batt = P_wheel ÷ (η_drive · η_motor)",
+   fact: "Losses on the way: about <b>10–15 %</b> in the inverter, motor and gearbox.",
+   f1: "fwd", f2: "fwd", col: "#38BDF8", m: "M", spin: ".45s", cap: "battery level falls while driving"},
+  {key: "regen", c: "#2EE59D", tag: "Step 2 · Regenerative braking", title: "The motor becomes a generator",
+   text: "When the driver brakes, the moving wheels now spin the motor. Working as a generator, it creates a braking torque that slows the car, and the electricity it makes flows back into the battery.",
+   path: ["Wheels", "Motor as generator", "Battery"], eq: "P_batt = P_wheel · η_drive · η_motor",
+   fact: "In this twin, about <b>75–80 %</b> of the braking energy gets back into the battery.",
+   f1: "rev", f2: "rev", col: "#2EE59D", m: "G", spin: "1.1s", cap: "battery level rises while braking"},
+  {key: "friction", c: "#FF5D5D", tag: "Step 3 · Friction braking", title: "Brake pads turn motion into heat",
+   text: "A conventional car squeezes brake pads against a disc. All of the car's kinetic energy becomes heat in the brakes and none of it returns to the battery. This is the baseline the twin compares against.",
+   path: ["Wheels", "Brake pads", "Heat 🔥"], eq: "E_lost = ½ · m · (v₁² − v₂²)",
+   fact: "Stopping a 1.5 t car from 50 km/h burns about <b>40 Wh</b>, enough to drive it roughly 300 m.",
+   f1: "", f2: "", col: "#FF5D5D", m: "M", spin: "1.4s", cap: "battery level unchanged: energy wasted"},
+  {key: "blend", c: "#FFB020", tag: "Step 4 · Blending", title: "Regen first, friction tops up",
+   text: "The regen controller always asks the motor first. When the motor, battery or strategy limit is reached, or the car is below about 10 km/h, the friction brakes add whatever is still needed. You can try this in the playground below.",
+   path: ["Driver request", "min(motor, battery, strategy)", "rest → friction"], eq: "P_regen = f_fade(v) · min(P_req, P_motor, P_batt, P_strategy)",
+   fact: "The braking events table shows <b>which limit</b> stopped regen in every stop.",
+   f1: "rev", f2: "rev", col: "#2EE59D", m: "G", spin: "1s", cap: "most energy recovered, the rest becomes heat"},
+];
+const DUR = 6500;
+let cur = 0, auto = true, timer = null;
+const nav = document.getElementById("nav");
+const btns = S.map((s, i) => { const b = document.createElement("button"); b.style.setProperty("--c", s.c);
+  b.innerHTML = `${i + 1} · ${s.key === "drive" ? "Accelerate" : s.key === "regen" ? "Regen" : s.key === "friction" ? "Friction" : "Blending"}<span class="bar"></span>`;
+  b.onclick = () => { show(i); }; nav.insertBefore(b, nav.querySelector(".sp")); return b; });
+document.getElementById("pp").onclick = () => { auto = !auto; document.getElementById("pp").textContent = auto ? "⏸ auto" : "▶ auto"; show(cur); };
+function show(i) {
+  cur = i; const s = S[i], sv = document.getElementById("sv");
+  sv.setAttribute("class", "s-" + s.key);
+  // restart CSS animations
+  sv.querySelectorAll(".lvl,.car").forEach(e => { e.style.animation = "none"; void e.getBoundingClientRect(); e.style.animation = ""; });
+  for (const id of ["f1", "f2"]) { const e = document.getElementById(id); e.setAttribute("class", "flow " + s[id]); e.style.stroke = s.col; e.style.opacity = s[id] ? 1 : 0; }
+  document.getElementById("l1").textContent = s.key === "regen" || s.key === "blend" ? "← charging current" : s.key === "friction" ? "no current" : "electricity →";
+  document.getElementById("l2").textContent = s.key === "drive" ? "drive torque →" : s.key === "friction" ? "motor idle" : "← braking torque";
+  document.getElementById("mM").setAttribute("opacity", s.m === "M" ? 1 : 0);
+  document.getElementById("mG").setAttribute("opacity", s.m === "G" ? 1 : 0);
+  document.getElementById("mc").setAttribute("stroke", s.key === "friction" ? "#3a4b66" : s.col);
+  document.getElementById("mt").textContent = s.m === "G" ? "GENERATOR" : "MOTOR";
+  document.getElementById("lv").setAttribute("fill", s.key === "regen" || s.key === "blend" ? "#2EE59D" : "#FFB020");
+  document.querySelector(".wheel").style.setProperty("--spin", s.spin);
+  document.getElementById("cap").textContent = s.cap;
+  document.getElementById("txt").innerHTML = `<div class="fade" style="--c:${s.c};display:flex;flex-direction:column;gap:10px">
+    <div class="k">${s.tag}</div><h2>${s.title}</h2><p>${s.text}</p>
+    <div class="path">${s.path.map(x => `<span>${x}</span>`).join("<i>→</i>")}</div>
+    <div class="eq">${s.eq}</div><div class="fact">${s.fact}</div></div>`;
+  btns.forEach((b, j) => { b.classList.toggle("on", j === i); b.style.setProperty("--dur", auto ? DUR + "ms" : "0ms");
+    const bar = b.querySelector(".bar"); bar.style.animation = "none"; void bar.offsetWidth; bar.style.animation = ""; if (!auto) bar.style.width = j === i ? "100%" : "0"; else bar.style.width = ""; });
+  clearTimeout(timer);
+  if (auto) timer = setTimeout(() => show((cur + 1) % S.length), DUR);
+}
+show(0);
+</script>
+</body>
+</html>

@@ -172,7 +172,12 @@ sequenceDiagram
 
 ```
 ev_regen_twin/
-├── app.py                       Streamlit dashboard (6 tabs, KPI cards, export)
+├── app.py                       Streamlit dashboard (7 tabs, KPI cards, export)
+├── ui/
+│   ├── theme.py                 Colour palette, global CSS, Plotly template, HTML cards
+│   ├── animations.py            Packs simulation data into the JavaScript animations
+│   └── assets/                  energy_flow.html (live twin), regen_explainer.html
+├── .streamlit/config.toml       Dark "instrument cluster" theme and fonts
 ├── run_cli.py                   Command-line runner: KPIs + sanity check
 ├── config/vehicle_default.json  All vehicle, battery, regen, OTA and twin parameters
 ├── core/
@@ -443,20 +448,23 @@ Result on WLTP: open-loop RMSE **2.09 %**, Kalman-corrected **0.17 %**, raw sens
 
 **Sidebar:** drive cycle (or CSV upload), number of repeats, initial SoC, ambient temperature, payload, road grade, regen strategy and level, advanced calibration (fade speeds, max regen power), OTA update (time, new calibration, an "inject unsafe values" demo option, rollback), and the twin-sync method.
 
-**KPI cards:** final SoC for both cases, kWh consumed, kWh recovered, recovery efficiency, Wh/km, range for both cases, range gain, and friction-brake energy saved. Below them is an expandable sanity-check panel.
+**Header:** an animated banner with the cycle facts and a 4-step "how to read this dashboard" strip.
+
+**KPI cards:** six animated cards, each with regen-vs-friction comparison bars: battery left, energy used, energy recovered (with a recovery-efficiency ring and "km of free driving"), Wh/km, range and brake heat. Below them is an expandable sanity-check panel.
 
 | Tab | Content |
 |---|---|
-| 🚗 Live Twin | Animated speed gauge, SoC gauge and power-flow gauge (Battery → Motor / Motor → Battery), plus a live VSS signal table, with play/pause, a time slider and a playback-speed slider. Also a trip overview chart and signal-bus statistics with a snapshot at any time |
+| 🚗 Live Twin | A 60 fps animation of the car driving the cycle: spinning wheels and moving road, blue dots carrying power battery → motor → wheels, green dots carrying braking energy back to the battery, red glow and heat particles for brake heat. Below it a live power-flow diagram (kW on every link), a plain-English status line that explains what is happening and why regen is limited, a clickable timeline with braking events, play/pause, 1–50× speed, "next braking event" and an automatic slow-motion while braking. On the side: a battery race (regen car vs friction-only car), running energy counters and live VSS signals. Also a trip overview chart and signal-bus statistics with a snapshot at any time |
+| 🎓 How Regen Works | A 4-step animated explainer (accelerate → regen → friction → blending) and a blending playground: set speed, braking power, battery level and temperature, and the real controller shows the motor, battery and strategy limits and the regen/friction split |
 | 📉 SoC Comparison | SoC with regen vs friction-only (braking events shaded), ΔSoC, speed, and cumulative recovered energy vs brake heat |
 | ⚡ Energy Breakdown | Sankey diagram (battery → motor → wheels → aero/rolling/brake heat/recovered), grouped bar chart, pie chart of lost braking energy by reason, and the motor efficiency map with operating points |
 | 🛑 Braking Events | Table of every braking event: duration, kinetic energy, recovered Wh, recovery %, and what limited regen |
-| 📡 OTA & Twin Sync | OTA event log, parameter diff, SoC with vs without OTA, version timeline; twin vs physical SoC, error plot and RMSE metrics |
+| 📡 OTA & Twin Sync | Animated OTA pipeline (received → checksum → validation → install → health monitor, or where it was rejected/rolled back), event log, parameter diff, SoC with vs without OTA, version timeline; animated twin ↔ vehicle sync diagram, twin vs physical SoC, error plot and RMSE metrics |
 | 📘 Theory | Block diagram, all equations, and the VSS catalogue |
 
 **💾 Export results** saves `exports/results_<cycle>_<time>.csv` (full time series of both cases) and `exports/charts_<cycle>_<time>.png` (a 4-panel summary), and offers both as downloads.
 
-**[Insert screenshot: Live Twin tab during playback, showing a regen event with the green "Motor → Battery" label]**
+**[Insert screenshot: Live Twin tab during playback, showing a "REGEN BRAKING" moment with green dots flowing into the battery]**
 **[Insert screenshot: SoC Comparison tab]**
 **[Insert screenshot: Energy Breakdown Sankey]**
 **[Insert screenshot: Braking Events table]**
@@ -608,7 +616,7 @@ Other observations from the model:
 |---|---|---|
 | 0:00 | Open the dashboard (WLTP default) | "This is a digital twin of a compact Indian EV. It runs the WLTP cycle second by second and simulates the battery with an equivalent-circuit model." |
 | 0:30 | Point at the KPI cards | "Same car, same cycle, two braking systems. With regen, the final SoC is about 0.9 points higher, consumption falls from 154 to 141 Wh/km, and range rises by about 9 %. Almost all friction-brake heat disappears, which also means less pad wear." |
-| 1:00 | **Live Twin** → ▶ Play at 50× | "These are live VSS signals, the same names a real SDV data broker uses. Watch the power-flow gauge: when we brake it turns green, Motor → Battery, so energy is flowing back in." |
+| 1:00 | **Live Twin** (plays automatically) → ⏭ Next braking | "Blue dots are battery power going to the wheels. When we brake, the dots turn green and flow back into the battery: the motor is now a generator. Red glow is energy lost as brake heat. On the right, the regen car pulls ahead in the battery race, and these are the live VSS signals a real SDV data broker would carry." |
 | 1:45 | **SoC Comparison** | "Green is regen, red is friction-only. The orange bands are braking events. Each one widens the gap; it's a staircase of saved energy." |
 | 2:15 | Sidebar → cycle **Indian MIDC** | "In a city cycle the gain jumps to about 24 % range, because there are more stops and less aero drag." |
 | 2:45 | **Energy Breakdown** | "The Sankey shows where every Wh goes. Recovered energy is green. The pie chart shows why some energy was not recovered; mostly low-speed fade." |

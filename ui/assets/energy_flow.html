@@ -1,0 +1,468 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#0A0E14;--panel:#111824;--panel2:#162031;--line:#22304A;--text:#E7ECF3;--muted:#8A97AB;
+  --regen:#2EE59D;--fric:#FF5D5D;--drive:#38BDF8;--volt:#FFB020;--mono:'JetBrains Mono',ui-monospace,monospace;--head:'Space Grotesk',sans-serif}
+*{box-sizing:border-box}
+html,body{margin:0;background:transparent;color:var(--text);font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:14px}
+.wrap{display:grid;grid-template-columns:minmax(0,1fr) 270px;gap:12px}
+@media(max-width:860px){.wrap{grid-template-columns:1fr}}
+.main,.side{display:grid;gap:10px;align-content:start;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden;position:relative}
+.status{display:flex;align-items:center;gap:12px;padding:10px 14px;min-height:62px}
+.pill{font:600 .74rem var(--mono);letter-spacing:.1em;padding:7px 11px;border-radius:999px;background:var(--mc,#8A97AB);
+  color:var(--ink);white-space:nowrap;transition:background .35s;box-shadow:0 0 18px -4px var(--mc)}
+.expl{flex:1;line-height:1.3;min-width:0}
+.expl b{font:600 .95rem var(--head)}
+.expl small{display:block;color:var(--muted);font-size:.8rem;margin-top:2px}
+.clock{font:500 .78rem var(--mono);color:var(--muted);text-align:right;white-space:nowrap}
+.clock b{color:var(--text);font-size:1rem;font-weight:600}
+svg{display:block;width:100%;height:auto}
+.scene .hint{position:absolute;left:12px;bottom:10px;font:.72rem var(--mono);color:var(--muted);background:rgba(10,14,20,.6);padding:3px 8px;border-radius:6px}
+@media(max-width:640px){.scene .hint{display:none}}
+.tl{padding:10px 12px 10px}
+.tlwrap{position:relative;height:84px}
+.tlwrap canvas{position:absolute;inset:0;width:100%;height:100%}
+#tlo{cursor:pointer}
+.legend{display:flex;gap:14px;font:.7rem var(--mono);color:var(--muted);margin:2px 0 6px;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.ctrl{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
+button{font:600 .78rem var(--mono);color:var(--text);background:var(--panel2);border:1px solid var(--line);border-radius:9px;
+  padding:7px 11px;cursor:pointer;transition:border-color .2s,background .2s}
+button:hover{border-color:var(--volt)}
+button.on{background:var(--volt);color:var(--ink);border-color:var(--volt)}
+#play{min-width:92px;background:var(--volt);color:var(--ink);border-color:var(--volt)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.seg button{border:0;border-radius:0;background:transparent;padding:7px 9px}
+.seg button.on{background:var(--volt);color:var(--ink)}
+.chk{font:.76rem var(--mono);color:var(--muted);display:flex;gap:6px;align-items:center;cursor:pointer}
+.chk input{accent-color:#FFB020}
+.side .card{padding:12px 14px}
+h4{margin:0 0 8px;font:600 .72rem var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.race{display:grid;grid-template-columns:1fr 1fr;gap:12px;text-align:center}
+.cell{position:relative;height:120px;width:62px;margin:0 auto;border:2px solid #3a4b66;border-radius:10px;overflow:hidden;background:#0c121b}
+.cell::before{content:"";position:absolute;top:-8px;left:50%;width:22px;height:7px;margin-left:-11px;background:#3a4b66;border-radius:3px 3px 0 0}
+.cell .fill{position:absolute;left:0;right:0;bottom:0;background:var(--c);transition:height .15s linear;box-shadow:0 0 18px -2px var(--c) inset}
+.cell .fill::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0 22px,rgba(10,14,20,.55) 22px 24px)}
+.race .nm{font:600 .72rem var(--mono);margin-top:6px;color:var(--c)}
+.race .pc{font:600 1.05rem var(--mono)}
+.gap{margin-top:10px;text-align:center;font:.8rem var(--mono);color:var(--muted)}
+.gap b{color:var(--regen);font-size:1rem}
+.cnt{display:grid;gap:8px}
+.cnt div{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:.8rem;color:var(--muted)}
+.cnt b{font:600 1.05rem var(--mono);color:var(--c)}
+.vss{display:grid;gap:3px;font:.7rem var(--mono)}
+.vss .r{display:grid;grid-template-columns:1fr auto;gap:6px;padding:3px 6px;border-radius:6px;transition:background .6s}
+.vss .r.flash{background:rgba(255,176,32,.16);transition:none}
+.vss .p{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vss .p em{font-style:normal;color:var(--volt);font-size:.62rem;border:1px solid rgba(255,176,32,.4);border-radius:4px;padding:0 3px;margin-left:4px}
+.vss .x{color:var(--text);text-align:right}
+.tiny{font:.66rem var(--mono);color:var(--muted);margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="main">
+    <div class="card status">
+      <span class="pill" id="pill">READY</span>
+      <div class="expl"><b id="head">Press play to start the drive</b><small id="sub">The twin replays every second of the simulated trip.</small></div>
+      <div class="clock">t = <b id="clk">0</b> s<br><span id="dist">0.00 km</span></div>
+    </div>
+
+    <div class="card scene">
+      <svg id="scene" viewBox="0 0 900 250" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0b1422"/><stop offset="1" stop-color="#13213a"/></linearGradient>
+          <filter id="glow" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="3.2" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          <radialGradient id="heat"><stop offset="0" stop-color="#FF7A45" stop-opacity="1"/><stop offset=".5" stop-color="#FF5D5D" stop-opacity=".55"/><stop offset="1" stop-color="#FF5D5D" stop-opacity="0"/></radialGradient>
+          <linearGradient id="beam" x1="0" x2="1"><stop offset="0" stop-color="#FFB020" stop-opacity=".35"/><stop offset="1" stop-color="#FFB020" stop-opacity="0"/></linearGradient>
+        </defs>
+        <rect width="900" height="250" fill="url(#sky)"/>
+        <g id="city" opacity=".55"></g>
+        <g id="poles"></g>
+        <rect y="200" width="900" height="50" fill="#0c121b"/>
+        <rect y="200" width="900" height="2" fill="#2a3a55"/>
+        <g id="dashes"></g>
+        <g id="streaks" stroke="#8fb8d8" stroke-linecap="round"></g>
+        <path d="M582 158 L700 146 L700 176 Z" fill="url(#beam)"/>
+        <g transform="translate(300,104) scale(1.5)">
+          <path d="M8 50 L14 34 Q18 28 28 27 L62 24 Q76 12 100 11 L134 12 Q150 14 162 26 L184 30 Q194 32 194 42 L194 50 Z"
+                fill="#1b2a40" stroke="#38BDF8" stroke-width="1.2"/>
+          <path d="M70 25 Q82 15 100 15 L128 15 Q142 17 150 26 Z" fill="#0d1624" stroke="#2c4060"/>
+          <path d="M104 15 L104 25" stroke="#2c4060"/>
+          <rect x="186" y="34" width="6" height="4" rx="1" fill="#FFB020"/>
+        </g>
+        <rect id="tail" x="313" y="157" width="8" height="8" rx="2" fill="#FF5D5D" opacity=".35"/>
+        <rect x="372" y="170" width="100" height="10" rx="3" fill="#0a0e14" stroke="#3a4b66"/>
+        <rect id="pack" x="373" y="171" width="98" height="8" rx="2" fill="#FFB020"/>
+        <text x="422" y="194" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#8A97AB">BATTERY</text>
+        <circle id="motor" cx="500" cy="175" r="9" fill="#0a0e14" stroke="#38BDF8" stroke-width="2"/>
+        <text x="500" y="178.5" text-anchor="middle" font-family="JetBrains Mono" font-size="9" font-weight="600" fill="#E7ECF3">M</text>
+        <circle id="hr" cx="372" cy="182" r="30" fill="url(#heat)" opacity="0"/>
+        <circle id="hf" cx="534" cy="182" r="30" fill="url(#heat)" opacity="0"/>
+        <g id="wr"><circle cx="372" cy="182" r="18" fill="#0a0e14" stroke="#c9d3e0" stroke-width="3.5"/>
+          <path d="M372 167 V197 M357 182 H387 M361 171 L383 193 M383 171 L361 193" stroke="#8A97AB" stroke-width="2"/>
+          <circle cx="372" cy="182" r="4" fill="#c9d3e0"/></g>
+        <g id="wf"><circle cx="534" cy="182" r="18" fill="#0a0e14" stroke="#c9d3e0" stroke-width="3.5"/>
+          <path d="M534 167 V197 M519 182 H549 M523 171 L545 193 M545 171 L523 193" stroke="#8A97AB" stroke-width="2"/>
+          <circle cx="534" cy="182" r="4" fill="#c9d3e0"/></g>
+        <g id="parts" filter="url(#glow)"></g>
+        <g id="heatp"></g>
+        <text x="22" y="52" font-family="JetBrains Mono" font-size="38" font-weight="600" fill="#E7ECF3" id="spd">0</text>
+        <text x="22" y="70" font-family="JetBrains Mono" font-size="11" fill="#8A97AB">km/h</text>
+        <text x="878" y="52" text-anchor="end" font-family="JetBrains Mono" font-size="30" font-weight="600" fill="#FFB020" id="socT">0.0 %</text>
+        <text x="878" y="70" text-anchor="end" font-family="JetBrains Mono" font-size="11" fill="#8A97AB">battery (with regen)</text>
+      </svg>
+      <div class="hint" id="hint">blue dots = power to the wheels · green dots = energy back into the battery · red glow = brake heat</div>
+    </div>
+
+    <div class="card">
+      <svg id="flow" viewBox="0 0 900 175" xmlns="http://www.w3.org/2000/svg" font-family="JetBrains Mono">
+        <path d="M200 65 H330" stroke="#22304A" stroke-width="14" stroke-linecap="round" fill="none"/>
+        <path d="M530 60 C600 60 610 40 680 40" stroke="#22304A" stroke-width="14" stroke-linecap="round" fill="none"/>
+        <path d="M785 70 V110" stroke="#22304A" stroke-width="14" stroke-linecap="round" fill="none"/>
+        <path d="M105 105 V125" stroke="#22304A" stroke-width="10" stroke-linecap="round" fill="none"/>
+        <path id="lbm" d="M200 65 H330" stroke-dasharray="2 13" stroke-linecap="round" fill="none"/>
+        <path id="lmw" d="M530 60 C600 60 610 40 680 40" stroke-dasharray="2 13" stroke-linecap="round" fill="none"/>
+        <path id="lwb" d="M785 70 V110" stroke-dasharray="2 13" stroke-linecap="round" fill="none"/>
+        <path id="lba" d="M105 105 V125" stroke-dasharray="2 9" stroke-linecap="round" fill="none"/>
+        <text id="tbm" x="265" y="48" text-anchor="middle" font-size="12" fill="#E7ECF3">0 kW</text>
+        <text id="tmw" x="606" y="30" text-anchor="middle" font-size="12" fill="#E7ECF3">0 kW</text>
+        <text id="twb" x="800" y="95" font-size="12" fill="#E7ECF3">0 kW</text>
+
+        <rect id="nb" x="10" y="25" width="190" height="80" rx="12" fill="#162031" stroke="#22304A" stroke-width="1.5"/>
+        <text x="24" y="47" font-size="11" fill="#8A97AB" letter-spacing="1.5">BATTERY</text>
+        <text id="nbv" x="186" y="47" text-anchor="end" font-size="15" font-weight="600" fill="#FFB020">0 %</text>
+        <text id="nbs" x="24" y="68" font-size="10.5" fill="#8A97AB">0 V · 0 A</text>
+        <rect x="24" y="80" width="162" height="12" rx="4" fill="#0a0e14"/>
+        <rect id="nbf" x="24" y="80" width="100" height="12" rx="4" fill="#FFB020"/>
+
+        <rect id="nm" x="330" y="25" width="200" height="80" rx="12" fill="#162031" stroke="#22304A" stroke-width="1.5"/>
+        <text x="344" y="47" font-size="11" fill="#8A97AB" letter-spacing="1.5">INVERTER + MOTOR</text>
+        <text id="nmm" x="344" y="72" font-size="16" font-weight="600" fill="#E7ECF3">IDLE</text>
+        <text id="nms" x="344" y="92" font-size="10.5" fill="#8A97AB">0 rpm · 0 N·m</text>
+
+        <rect id="nw" x="680" y="10" width="210" height="60" rx="12" fill="#162031" stroke="#22304A" stroke-width="1.5"/>
+        <text x="694" y="32" font-size="11" fill="#8A97AB" letter-spacing="1.5">WHEELS</text>
+        <text id="nwv" x="694" y="56" font-size="16" font-weight="600" fill="#E7ECF3">0 km/h</text>
+
+        <rect id="nf" x="680" y="110" width="210" height="58" rx="12" fill="#162031" stroke="#22304A" stroke-width="1.5"/>
+        <text x="694" y="131" font-size="11" fill="#8A97AB" letter-spacing="1.5">FRICTION BRAKES</text>
+        <text id="nfv" x="694" y="155" font-size="13" font-weight="600" fill="#8A97AB">cold</text>
+
+        <rect x="10" y="125" width="190" height="40" rx="10" fill="#162031" stroke="#22304A" stroke-width="1.5"/>
+        <text x="24" y="149" font-size="10.5" fill="#8A97AB">AUX · HVAC, 12 V</text>
+        <text id="nav" x="186" y="149" text-anchor="end" font-size="11" fill="#E7ECF3">0.4 kW</text>
+      </svg>
+    </div>
+
+    <div class="card tl">
+      <div class="legend"><span><i style="background:#38BDF8"></i>speed trace</span><span><i style="background:#2EE59D"></i>regen braking</span>
+        <span><i style="background:#FF5D5D"></i>friction braking</span><span style="margin-left:auto">click or drag to jump in time</span></div>
+      <div class="tlwrap"><canvas id="tlb"></canvas><canvas id="tlo"></canvas></div>
+      <div class="ctrl">
+        <button id="play">▶ Play</button>
+        <button id="restart" title="Back to start">⟲ Restart</button>
+        <button id="next" title="Jump to the next braking event">⏭ Next braking</button>
+        <span class="seg" id="speeds"></span>
+        <label class="chk"><input type="checkbox" id="slow" checked> slow-motion while braking</label>
+      </div>
+    </div>
+  </div>
+
+  <div class="side">
+    <div class="card">
+      <h4>Battery race</h4>
+      <div class="race">
+        <div style="--c:#2EE59D"><div class="cell"><div class="fill" id="cr"></div></div><div class="nm">WITH REGEN</div><div class="pc" id="pr">0 %</div></div>
+        <div style="--c:#FF5D5D"><div class="cell"><div class="fill" id="cf"></div></div><div class="nm">FRICTION ONLY</div><div class="pc" id="pf">0 %</div></div>
+      </div>
+      <div class="gap">regen car is ahead by <b id="gap">+0.00</b> pp</div>
+      <div class="tiny">same car, same trip, same start: only the braking differs. Cells use a zoomed scale.</div>
+    </div>
+    <div class="card">
+      <h4>Energy so far</h4>
+      <div class="cnt">
+        <div style="--c:#2EE59D">♻ recovered into battery <b id="cer">0 Wh</b></div>
+        <div style="--c:#FFB020">🛣 free driving from it <b id="ckm">0.00 km</b></div>
+        <div style="--c:#FF5D5D">🔥 brake heat · regen car <b id="cef">0 Wh</b></div>
+        <div style="--c:#FF5D5D">🔥 brake heat · friction car <b id="ceff">0 Wh</b></div>
+      </div>
+    </div>
+    <div class="card">
+      <h4>Live VSS signals</h4>
+      <div class="vss" id="vss"></div>
+      <div class="tiny">what the car publishes on its signal bus each second · <span style="color:#FFB020">custom</span> = project extension</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const D = __DATA__;
+const N = D.t.length, DT = N > 1 ? D.t[1] - D.t[0] : 1;
+const C = {regen: "#2EE59D", fric: "#FF5D5D", drive: "#38BDF8", volt: "#FFB020", muted: "#8A97AB", line: "#22304A"};
+const $ = id => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const fx = (x, d) => (Math.abs(x) < 0.5 * Math.pow(10, -d) ? 0 : x).toFixed(d);
+function el(tag, attrs, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+
+// ------------------------------------------------------------ static scenery
+(function scenery() {
+  let seed = 7; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+  const city = $("city");
+  for (let copy = 0; copy < 2; copy++) {
+    let x = copy * 900;
+    while (x < (copy + 1) * 900) {
+      const w = 30 + rnd() * 50, h = 30 + rnd() * 90;
+      el("rect", {x: x, y: 200 - h, width: w - 4, height: h, fill: "#16243a"}, city);
+      for (let wy = 200 - h + 8; wy < 192; wy += 12) for (let wx = x + 5; wx < x + w - 10; wx += 9)
+        if (rnd() > 0.72) el("rect", {x: wx, y: wy, width: 3, height: 4, fill: "#FFB020", opacity: 0.35}, city);
+      x += w;
+    }
+  }
+  const poles = $("poles");
+  for (let x = 0; x < 1200; x += 240) {
+    el("rect", {x: x, y: 120, width: 3, height: 80, fill: "#24344e"}, poles);
+    el("rect", {x: x - 10, y: 118, width: 18, height: 4, rx: 2, fill: "#24344e"}, poles);
+    el("circle", {cx: x - 8, cy: 124, r: 3, fill: "#FFB020", opacity: 0.55}, poles);
+  }
+  const dashes = $("dashes");
+  for (let x = 0; x < 1000; x += 100) el("rect", {x: x, y: 223, width: 50, height: 4, rx: 2, fill: "#c9d3e0", opacity: 0.45}, dashes);
+  const streaks = $("streaks");
+  for (let i = 0; i < 7; i++) el("line", {x1: 0, y1: 120 + i * 11, x2: 0, y2: 120 + i * 11, "stroke-width": 1.5, opacity: 0}, streaks);
+})();
+
+// ------------------------------------------------------------ particle pools
+function pool(parent, n, r) { const a = []; for (let i = 0; i < n; i++) a.push(el("circle", {r: r, cx: -10, cy: -10, opacity: 0}, parent)); return a; }
+const dots = pool($("parts"), 70, 3.2), heats = pool($("heatp"), 50, 2.6);
+const PATH = [[422, 175], [500, 175], [534, 182]];
+const seg = [], segLen = []; let pathLen = 0;
+for (let i = 1; i < PATH.length; i++) { const l = Math.hypot(PATH[i][0] - PATH[i - 1][0], PATH[i][1] - PATH[i - 1][1]); segLen.push(l); pathLen += l; }
+function along(s) { let d = s * pathLen; for (let i = 0; i < segLen.length; i++) { if (d <= segLen[i] || i === segLen.length - 1) { const f = clamp(d / segLen[i], 0, 1);
+  return [PATH[i][0] + (PATH[i + 1][0] - PATH[i][0]) * f, PATH[i][1] + (PATH[i + 1][1] - PATH[i][1]) * f]; } d -= segLen[i]; } return PATH[0]; }
+let flowP = [], heatP = [], accF = 0, accH = 0;
+
+// ------------------------------------------------------------ VSS list
+const VSS = [
+  ["Vehicle.Speed", s => fx(s.v, 1), "km/h", 0],
+  ["…TractionBattery.StateOfCharge.Current", s => fx(s.soc, 2), "%", 0],
+  ["…TractionBattery.CurrentCurrent", s => fx(-s.cur, 1), "A", 0],
+  ["…TractionBattery.CurrentVoltage", s => fx(s.vo, 1), "V", 0],
+  ["…TractionBattery.CurrentPower", s => fx(-s.pb, 2), "kW", 0],
+  ["…TractionMotor.Speed", s => fx(s.rpm, 0), "rpm", 0],
+  ["…TractionMotor.Torque", s => fx(s.tq, 0), "N·m", 0],
+  ["Vehicle.Chassis.Brake.RegenPower", s => fx(s.prw, 2), "kW", 1],
+  ["Vehicle.Chassis.Brake.FrictionPower", s => fx(s.pfr, 2), "kW", 1],
+  ["Vehicle.Chassis.Brake.RegenLimitReason", s => s.rs || "-", "", 1],
+];
+const vssRows = VSS.map(([p, , , custom]) => {
+  const r = document.createElement("div"); r.className = "r";
+  r.innerHTML = `<span class="p" title="${p}">${p}${custom ? "<em>custom</em>" : ""}</span><span class="x">-</span>`;
+  $("vss").appendChild(r); return r;
+});
+let vssPrev = VSS.map(() => "");
+
+// ------------------------------------------------------------ explanations
+const WHY = {
+  "Full regen": "Regen covers all of the braking, so nothing is wasted as heat.",
+  "Low-speed fade": "Below about 10 km/h the motor can't generate useful power, so regen fades out and the pads finish the stop.",
+  "Motor limit": "The car is braking harder than the motor can generate; the pads add the rest.",
+  "Strategy limit": "The selected regen strategy/level only lets the motor do part of the braking.",
+  "SoC limit": "The battery is almost full, so it can't take much more charge.",
+  "Battery power limit": "The battery can't absorb charging power this fast.",
+  "Temperature derate": "The battery is too cold or hot to charge quickly.",
+  "Regen disabled": "Regen is switched off, so all braking energy becomes heat.",
+};
+const why = r => WHY[r] || "";
+function classify(s) {
+  if (s.v < 0.5 && s.ptr < 0.3 && s.prw < 0.2 && s.pfr < 0.2) return ["STOPPED", C.muted, "Standing still", "Only the auxiliaries (HVAC, 12 V electronics) draw a little power."];
+  if (s.ptr > 0.3) return ["DRIVING", C.drive, "Battery → inverter → motor → wheels", `The battery pushes the car: ${fx(s.ptr, 1)} kW at the wheels.`];
+  if (s.prw > 0.2 && s.pfr < 0.2) return ["REGEN BRAKING", C.regen, "Wheels → motor (as a generator) → battery", `The car's motion is being turned back into charge: ${fx(s.prb, 1)} kW flowing into the battery.`];
+  if (s.prw > 0.2) return ["BLENDED BRAKING", C.volt, "Regen and friction brakes share the work", `Motor recovers ${fx(s.prw, 1)} kW, pads burn ${fx(s.pfr, 1)} kW. ${why(s.rs)}`];
+  if (s.pfr > 0.2) return ["FRICTION BRAKING", C.fric, "Brake pads turn motion into heat", why(s.rs) || "All braking energy is lost as heat."];
+  return ["COASTING", C.muted, "Rolling without braking", "Air drag and tyre rolling resistance slow the car gently."];
+}
+
+// ------------------------------------------------------------ sampling
+const KEYS = ["v", "soc", "socf", "pb", "pm", "prb", "pfr", "prw", "ptr", "cur", "vo", "rpm", "tq", "er", "ef", "eff", "d"];
+function sample(k) {
+  const x = clamp(k, 0, N - 1), i = Math.floor(x), j = Math.min(N - 1, i + 1), f = x - i, s = {i: i};
+  for (const key of KEYS) s[key] = D[key][i] + (D[key][j] - D[key][i]) * f;
+  s.t = D.t[i] + (D.t[j] - D.t[i]) * f;
+  s.rs = D.reasons[D.rs[f < 0.5 ? i : j]];
+  return s;
+}
+const braking = k => D.prw[k] + D.pfr[k] > 0.2;
+const socLo = Math.min(...D.socf) - 0.25, socHi = Math.max(D.meta.soc0, ...D.soc) + 0.05;
+
+// ------------------------------------------------------------ timeline
+function drawBase() {
+  const c = $("tlb"), w = c.clientWidth, h = c.clientHeight, dpr = window.devicePixelRatio || 1;
+  c.width = w * dpr; c.height = h * dpr; const x = c.getContext("2d"); x.scale(dpr, dpr); x.clearRect(0, 0, w, h);
+  const vmax = Math.max(...D.v, 1) * 1.08, bw = Math.max(1, w / N + 0.6);
+  for (let k = 0; k < N; k++) {
+    const X = k / (N - 1) * w;
+    if (D.prw[k] > 0.2) { x.fillStyle = "rgba(46,229,157,0.85)"; x.fillRect(X, h - 12, bw, 5); }
+    if (D.pfr[k] > 0.2) { x.fillStyle = "rgba(255,93,93,0.9)"; x.fillRect(X, h - 6, bw, 5); }
+  }
+  const g = x.createLinearGradient(0, 0, 0, h); g.addColorStop(0, "rgba(56,189,248,0.28)"); g.addColorStop(1, "rgba(56,189,248,0)");
+  x.beginPath(); x.moveTo(0, h - 14);
+  for (let k = 0; k < N; k++) x.lineTo(k / (N - 1) * w, (h - 14) - D.v[k] / vmax * (h - 20));
+  x.lineTo(w, h - 14); x.closePath(); x.fillStyle = g; x.fill();
+  x.beginPath();
+  for (let k = 0; k < N; k++) { const X = k / (N - 1) * w, Y = (h - 14) - D.v[k] / vmax * (h - 20); k ? x.lineTo(X, Y) : x.moveTo(X, Y); }
+  x.strokeStyle = C.drive; x.lineWidth = 1.4; x.stroke();
+}
+function drawHead(k) {
+  const c = $("tlo"), w = c.clientWidth, h = c.clientHeight, dpr = window.devicePixelRatio || 1;
+  if (c.width !== Math.round(w * dpr)) { c.width = w * dpr; c.height = h * dpr; }
+  const x = c.getContext("2d"); x.setTransform(dpr, 0, 0, dpr, 0, 0); x.clearRect(0, 0, w, h);
+  const X = k / Math.max(1, N - 1) * w;
+  x.fillStyle = "rgba(10,14,20,0.45)"; x.fillRect(X, 0, w - X, h);
+  x.strokeStyle = C.volt; x.lineWidth = 2; x.beginPath(); x.moveTo(X, 0); x.lineTo(X, h); x.stroke();
+  x.fillStyle = C.volt; x.beginPath(); x.arc(X, 5, 4.5, 0, 7); x.fill();
+}
+
+// ------------------------------------------------------------ playback state
+let k = 0, playing = true, speed = 10, last = null, off = 0, ang = 0, dashOff = {bm: 0, mw: 0, wb: 0, ba: 0}, lastVss = 0;
+const SPEEDS = [1, 5, 10, 25, 50];
+SPEEDS.forEach(sp => { const b = document.createElement("button"); b.textContent = sp + "×"; b.onclick = () => { speed = sp; markSpeed(); }; $("speeds").appendChild(b); });
+function markSpeed() { [...$("speeds").children].forEach((b, i) => b.classList.toggle("on", SPEEDS[i] === speed)); }
+markSpeed();
+function setPlay(p) { playing = p; $("play").textContent = p ? "⏸ Pause" : "▶ Play"; }
+$("play").onclick = () => { if (!playing && k >= N - 1) k = 0; setPlay(!playing); };
+$("restart").onclick = () => { k = 0; setPlay(true); };
+$("next").onclick = () => {
+  let j = Math.floor(k) + 1;
+  while (j < N && braking(j)) j++;
+  while (j < N && !braking(j)) j++;
+  if (j < N) { k = Math.max(0, j - 3); setPlay(true); }
+};
+document.addEventListener("keydown", e => { if (e.code === "Space") { e.preventDefault(); $("play").click(); } });
+const tlo = $("tlo"); let dragging = false;
+const seek = e => { const r = tlo.getBoundingClientRect(); k = clamp((e.clientX - r.left) / r.width, 0, 1) * (N - 1); };
+tlo.addEventListener("pointerdown", e => { dragging = true; tlo.setPointerCapture(e.pointerId); seek(e); });
+tlo.addEventListener("pointermove", e => { if (dragging) seek(e); });
+tlo.addEventListener("pointerup", () => dragging = false);
+
+// ------------------------------------------------------------ render
+function link(id, txt, p, color, dir, maxKw, dt, key, label) {
+  const e = $(id), on = Math.abs(p) > 0.05;
+  e.setAttribute("stroke", on ? color : "transparent");
+  e.setAttribute("stroke-width", (3 + 9 * clamp(Math.abs(p) / maxKw, 0, 1)).toFixed(1));
+  dashOff[key] -= dir * (20 + 120 * clamp(Math.abs(p) / maxKw, 0, 1)) * dt;
+  e.setAttribute("stroke-dashoffset", dashOff[key].toFixed(1));
+  if (txt) { $(txt).textContent = on ? `${fx(Math.abs(p), 1)} kW ${label || ""}` : "0 kW"; $(txt).setAttribute("fill", on ? color : C.muted); }
+}
+function node(id, color) { $(id).setAttribute("stroke", color || C.line); }
+
+function render(dt) {
+  const s = sample(k), vms = s.v / 3.6;
+  const [mode, mc, head, sub] = classify(s);
+  $("pill").textContent = mode; $("pill").style.setProperty("--mc", mc);
+  $("head").textContent = head; $("sub").textContent = sub;
+  $("clk").textContent = fx(s.t, 0); $("dist").textContent = fx(s.d, 2) + " km";
+
+  // scenery motion (visual speed independent of playback rate so it looks natural)
+  const px = playing ? vms * 9 * dt : 0;
+  off += px; ang += px / 18 * 57.3;
+  $("city").setAttribute("transform", `translate(${-(off * 0.12 % 900)},0)`);
+  $("poles").setAttribute("transform", `translate(${-(off * 0.5 % 240)},0)`);
+  $("dashes").setAttribute("transform", `translate(${-(off % 100)},0)`);
+  $("wr").setAttribute("transform", `rotate(${ang % 360} 372 182)`);
+  $("wf").setAttribute("transform", `rotate(${ang % 360} 534 182)`);
+  const so = clamp((s.v - 55) / 70, 0, 0.7);
+  [...$("streaks").children].forEach((l, i) => { const len = 30 + ((i * 37 + off * 0.8) % 80);
+    const x0 = 290 - ((i * 53 + off * 1.7) % 220); l.setAttribute("x1", x0); l.setAttribute("x2", x0 - len); l.setAttribute("opacity", so * (0.4 + (i % 3) * 0.2)); });
+
+  // car internals
+  const brakingNow = s.prw + s.pfr > 0.2, charging = s.prb > 0.2;
+  $("tail").setAttribute("opacity", brakingNow ? 1 : 0.35); $("tail").setAttribute("filter", brakingNow ? "url(#glow)" : "");
+  $("pack").setAttribute("width", (98 * clamp(s.soc / 100, 0, 1)).toFixed(1));
+  $("pack").setAttribute("fill", charging ? C.regen : C.volt); $("pack").setAttribute("filter", charging ? "url(#glow)" : "");
+  $("motor").setAttribute("stroke", charging ? C.regen : s.ptr > 0.3 ? C.drive : C.muted);
+  const heat = clamp(s.pfr / 25, 0, 1);
+  $("hr").setAttribute("opacity", (heat * 0.9).toFixed(2)); $("hf").setAttribute("opacity", (heat * 0.9).toFixed(2));
+  $("spd").textContent = fx(s.v, 0); $("socT").textContent = fx(s.soc, 2) + " %";
+
+  // energy particles: pack -> motor -> wheel (drive) or reverse (regen)
+  if (playing) {
+    const drivePow = s.ptr > 0.3 ? s.ptr : 0, regenPow = s.prb;
+    const pw = Math.max(drivePow, regenPow);
+    accF += clamp(pw / 2.5, 0, 26) * dt;
+    while (accF >= 1 && flowP.length < dots.length) { accF -= 1; flowP.push({s: 0, rev: regenPow > drivePow, c: regenPow > drivePow ? C.regen : C.drive}); }
+    accH += clamp(s.pfr / 1.2, 0, 30) * dt;
+    while (accH >= 1 && heatP.length < heats.length) { accH -= 1; const w = Math.random() < 0.5 ? 372 : 534;
+      heatP.push({x: w + (Math.random() - 0.5) * 22, y: 176 + Math.random() * 10, vy: 25 + Math.random() * 30, life: 1}); }
+    flowP.forEach(p => p.s += dt * 1.1); flowP = flowP.filter(p => p.s < 1);
+    heatP.forEach(p => { p.y -= p.vy * dt; p.x -= vms * 2 * dt; p.life -= dt * 1.3; }); heatP = heatP.filter(p => p.life > 0);
+  }
+  dots.forEach((d, i) => { const p = flowP[i]; if (!p) { d.setAttribute("opacity", 0); return; }
+    const [x, y] = along(p.rev ? 1 - p.s : p.s); d.setAttribute("cx", x.toFixed(1)); d.setAttribute("cy", y.toFixed(1));
+    d.setAttribute("fill", p.c); d.setAttribute("opacity", 0.95); });
+  heats.forEach((d, i) => { const p = heatP[i]; if (!p) { d.setAttribute("opacity", 0); return; }
+    d.setAttribute("cx", p.x.toFixed(1)); d.setAttribute("cy", p.y.toFixed(1)); d.setAttribute("fill", p.life > 0.6 ? "#FFB020" : C.fric);
+    d.setAttribute("opacity", (p.life * 0.9).toFixed(2)); });
+
+  // power-flow schematic
+  const mDir = s.pm >= 0 ? 1 : -1, mCol = s.pm >= 0 ? C.drive : C.regen;
+  link("lbm", "tbm", s.pm, mCol, mDir, 60, dt, "bm", s.pm >= 0 ? "→" : "← charging");
+  const wheelP = s.ptr > 0.3 ? s.ptr : -s.prw, wCol = wheelP >= 0 ? C.drive : C.regen;
+  link("lmw", "tmw", wheelP, wCol, wheelP >= 0 ? 1 : -1, 60, dt, "mw", wheelP >= 0 ? "→" : "← regen");
+  link("lwb", "twb", s.pfr, C.fric, 1, 40, dt, "wb", "heat");
+  link("lba", null, D.meta.aux_kw, C.muted, 1, 3, dt, "ba");
+  $("nav").textContent = fx(D.meta.aux_kw, 1) + " kW";
+  $("nbv").textContent = fx(s.soc, 2) + " %"; $("nbs").textContent = `${fx(s.vo, 0)} V · ${fx(-s.cur, 0)} A ${charging ? "(charging)" : ""}`;
+  $("nbf").setAttribute("width", (162 * clamp(s.soc / 100, 0, 1)).toFixed(1)); $("nbf").setAttribute("fill", charging ? C.regen : C.volt);
+  node("nb", charging ? C.regen : s.pm > 0.3 ? C.drive : null);
+  $("nmm").textContent = s.pm < -0.05 ? "GENERATOR ♻" : s.pm > 0.3 ? "MOTOR ⚡" : "IDLE";
+  $("nmm").setAttribute("fill", s.pm < -0.05 ? C.regen : s.pm > 0.3 ? C.drive : "#E7ECF3");
+  $("nms").textContent = `${fx(s.rpm, 0)} rpm · ${fx(s.tq, 0)} N·m`;
+  node("nm", s.pm < -0.05 ? C.regen : s.pm > 0.3 ? C.drive : null);
+  $("nwv").textContent = fx(s.v, 1) + " km/h"; node("nw", s.v > 0.5 ? C.drive : null);
+  $("nfv").textContent = s.pfr > 0.2 ? `🔥 ${fx(s.pfr, 1)} kW → heat` : "cold"; $("nfv").setAttribute("fill", s.pfr > 0.2 ? C.fric : C.muted);
+  node("nf", s.pfr > 0.2 ? C.fric : null); $("nf").setAttribute("fill", `rgba(255,93,93,${(heat * 0.25).toFixed(2)})`);
+
+  // side panels
+  const z = v => clamp((v - socLo) / (socHi - socLo), 0, 1) * 100;
+  $("cr").style.height = z(s.soc).toFixed(1) + "%"; $("cf").style.height = z(s.socf).toFixed(1) + "%";
+  $("pr").textContent = fx(s.soc, 2) + " %"; $("pf").textContent = fx(s.socf, 2) + " %";
+  $("gap").textContent = (s.soc - s.socf >= 0 ? "+" : "") + fx(s.soc - s.socf, 2);
+  $("cer").textContent = fx(s.er, 0) + " Wh"; $("cef").textContent = fx(s.ef, 0) + " Wh"; $("ceff").textContent = fx(s.eff, 0) + " Wh";
+  $("ckm").textContent = fx(D.meta.wh_per_km > 0 ? s.er / D.meta.wh_per_km : 0, 2) + " km";
+  const now = performance.now();
+  if (now - lastVss > 120) {
+    lastVss = now;
+    VSS.forEach(([, f, unit], i) => { const v = f(s) + (unit ? " " + unit : ""); const r = vssRows[i];
+      if (v !== vssPrev[i]) { r.lastChild.textContent = v; if (playing && i >= 7 && v !== vssPrev[i] && vssPrev[i] !== "") { r.classList.add("flash"); setTimeout(() => r.classList.remove("flash"), 60); } vssPrev[i] = v; } });
+  }
+  drawHead(k);
+}
+
+function frame(ts) {
+  const dt = last === null ? 0 : Math.min(0.1, (ts - last) / 1000); last = ts;
+  if (playing && !dragging) {
+    const eff = $("slow").checked && braking(Math.floor(k)) ? Math.min(speed, 2) : speed;
+    k += dt * eff / DT;
+    if (k >= N - 1) { k = N - 1; setPlay(false); $("pill").textContent = "TRIP COMPLETE"; }
+  }
+  render(dt);
+  if (k >= N - 1 && !playing) {
+    $("pill").textContent = "TRIP COMPLETE"; $("pill").style.setProperty("--mc", C.volt);
+    $("head").textContent = `Finished: ${fx(D.soc[N - 1], 2)} % vs ${fx(D.socf[N - 1], 2)} % battery left`;
+    $("sub").textContent = `Regen put ${fx(D.er[N - 1], 0)} Wh back into the battery. Press ▶ to watch again.`;
+  }
+  requestAnimationFrame(frame);
+}
+drawBase(); window.addEventListener("resize", drawBase);
+setPlay(true);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

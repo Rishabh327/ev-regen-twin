@@ -26,19 +26,27 @@ from core.analysis import (  # noqa: E402
 )
 from core.drive_cycles import BUILTIN_CYCLES, cycle_stats, load_cycle, parse_uploaded_csv, repeat_cycle  # noqa: E402
 from core.motor_model import MotorModel, MotorParams  # noqa: E402
-from core.regen_controller import REGEN_LEVELS, RegenParams  # noqa: E402
+from core.regen_controller import REGEN_LEVELS, BrakeContext, RegenParams  # noqa: E402
 from core.simulator import SimulationResult, Simulator  # noqa: E402
 from sdv.ota_update import OtaManager, OtaPackage  # noqa: E402
 from sdv.signals import VSS_CATALOG, SignalBus, SignalPublisher, catalog_frame  # noqa: E402
 from sdv.twin_sync import TwinSyncResult, run_twin_sync  # noqa: E402
+from ui import theme  # noqa: E402  (also registers the Plotly template)
+from ui.animations import energy_flow, regen_explainer  # noqa: E402
 
 st.set_page_config(page_title="EV Regen Digital Twin", page_icon="🔋", layout="wide")
 
-C_REGEN = "#1a9850"      # green  = regenerative braking case
-C_FRIC = "#d73027"       # red    = friction-only baseline
-C_OTA = "#7b3294"        # purple = OTA case
-C_SPEED = "#4575b4"
-C_BRAKE_SHADE = "rgba(253, 174, 97, 0.25)"
+C_REGEN = theme.REGEN    # green  = regenerative braking case
+C_FRIC = theme.FRIC      # red    = friction-only baseline
+C_OTA = theme.OTA        # purple = OTA case
+C_SPEED = theme.DRIVE
+C_SOC = theme.VOLT
+C_BRAKE_SHADE = theme.BRAKE_SHADE
+def show_html(body: str) -> None:
+    """Render our own trusted HTML/CSS/SVG widgets unsanitised (the sanitiser drops <style> and <svg>)."""
+    st.html(body, unsafe_allow_javascript=True)
+
+
 STRATEGY_LABELS = {
     "series": "Series / regen-first (max recovery)",
     "parallel": "Parallel (fixed regen share)",
@@ -99,8 +107,11 @@ def simulate_everything(cycle: pd.DataFrame, sim_inputs: dict[str, Any], regen_i
 # =============================================================================
 def sidebar(cfg: dict[str, Any]) -> tuple[pd.DataFrame, str, dict, dict, dict, dict]:
     sb = st.sidebar
-    sb.title("🔋 EV Regen Twin")
-    sb.caption("Software Defined Vehicles - course project")
+    sb.html(f"""<div style="display:flex;gap:10px;align-items:center;margin:2px 0 6px">
+      <div style="width:38px;height:38px;border-radius:11px;display:grid;place-items:center;font-size:1.25rem;
+                  background:linear-gradient(135deg,{theme.REGEN},{theme.DRIVE})">⚡</div>
+      <div><div style="font:700 1.1rem {theme.FONT_HEAD};color:{theme.TEXT}">EV Regen Twin</div>
+      <div style="font:.72rem {theme.FONT_MONO};color:{theme.MUTED}">Software-Defined Vehicles</div></div></div>""")
 
     sb.header("1 · Drive cycle")
     options = {info.label: key for key, info in BUILTIN_CYCLES.items()}
@@ -187,162 +198,40 @@ def sidebar(cfg: dict[str, Any]) -> tuple[pd.DataFrame, str, dict, dict, dict, d
 # KPI cards
 # =============================================================================
 def kpi_cards(kr: dict[str, float], kf: dict[str, float], cmp: dict[str, float]) -> None:
-    c = st.columns(5)
-    c[0].metric("Final SoC · regen", f"{kr['final_soc_pct']:.2f} %", f"{cmp['soc_saved_pct']:+.2f} % vs friction")
-    c[1].metric("Final SoC · friction-only", f"{kf['final_soc_pct']:.2f} %")
-    c[2].metric("kWh consumed (net)", f"{kr['kwh_consumed_net']:.3f}",
-                f"{-cmp['energy_saved_kwh']:+.3f} kWh vs {kf['kwh_consumed_net']:.3f}", delta_color="inverse")
-    c[3].metric("kWh recovered", f"{kr['kwh_recovered']:.3f}", f"{kr['regen_share_pct']:.1f} % of traction energy",
-                delta_color="off")
-    c[4].metric("Recovery efficiency", f"{kr['recovery_eff_pct']:.1f} %", "of wheel braking energy", delta_color="off")
-    c = st.columns(5)
-    c[0].metric("Consumption · regen (Wh/km)", f"{kr['wh_per_km']:.1f}",
-                f"{kr['wh_per_km'] - kf['wh_per_km']:+.1f} vs {kf['wh_per_km']:.1f}", delta_color="inverse")
-    c[1].metric("Est. range · regen", f"{kr['range_km']:.0f} km")
-    c[2].metric("Est. range · friction-only", f"{kf['range_km']:.0f} km")
-    c[3].metric("Range gain", f"{cmp['range_gain_pct']:+.1f} %")
-    c[4].metric("Friction-brake energy saved", f"{cmp['friction_saved_kwh']:.3f} kWh",
-                f"{cmp['friction_saved_pct']:.0f} % less pad wear (proxy)", delta_color="off")
+    show_html(theme.kpi_grid_html(kr, kf, cmp))
 
 
 # =============================================================================
 # Tab 1: Live twin animation
 # =============================================================================
-LIVE_SIGNALS = [
-    ("Vehicle.Speed", "speed_kmh", 1.0),
-    ("Vehicle.Powertrain.TractionBattery.StateOfCharge.Current", "soc_pct", 1.0),
-    ("Vehicle.Powertrain.TractionBattery.CurrentCurrent", "current_a", -1.0),
-    ("Vehicle.Powertrain.TractionBattery.CurrentVoltage", "voltage_v", 1.0),
-    ("Vehicle.Powertrain.TractionBattery.CurrentPower", "p_batt_w", -1.0),
-    ("Vehicle.Powertrain.TractionMotor.Speed", "motor_speed_rpm", 1.0),
-    ("Vehicle.Powertrain.TractionMotor.Torque", "motor_torque_nm", 1.0),
-    ("Vehicle.Chassis.Brake.RegenPower", "p_regen_wheel_w", 1.0),
-    ("Vehicle.Chassis.Brake.FrictionPower", "p_friction_w", 1.0),
-    ("Vehicle.Chassis.Brake.RegenLimitReason", "regen_reason", None),
-]
-
-
-def _flow_label(p_batt_kw: float) -> tuple[str, str]:
-    if p_batt_kw > 1.0:
-        return "Battery → Motor (driving)", "#4575b4"
-    if p_batt_kw < -0.05:
-        return "Motor → Battery (REGEN)", C_REGEN
-    return "Idle / aux loads only", "#999999"
-
-
-def _live_values(r: pd.Series) -> list[str]:
-    vals = []
-    for path, col, sign in LIVE_SIGNALS:
-        v = r[col]
-        vals.append(str(v or "-") if sign is None else f"{sign * float(v):,.2f}")
-    return vals
-
-
-def live_figure(df: pd.DataFrame, speedup: float, max_frames: int = 300) -> go.Figure:
-    n = len(df)
-    stride = max(1, math.ceil(n / max_frames))
-    idx = list(range(0, n, stride))
-    if idx[-1] != n - 1:
-        idx.append(n - 1)
-    vmax = max(140.0, float(df["speed_kmh"].max()) * 1.1)
-    p_lo = min(-50.0, float(df["p_batt_w"].min()) / 1000 * 1.1)
-    p_hi = max(60.0, float(df["p_batt_w"].max()) / 1000 * 1.1)
-
-    # Only indicator + table traces are animated: Plotly's redraw-animation does not render
-    # xy subplots reliably next to them, so the speed/SoC trace is a separate static chart.
-    fig = make_subplots(
-        rows=2, cols=3, row_heights=[0.5, 0.5], vertical_spacing=0.08,
-        specs=[[{"type": "indicator"}, {"type": "indicator"}, {"type": "indicator"}],
-               [{"type": "table", "colspan": 3}, None, None]],
-    )
-
-    def gauges(r: pd.Series) -> list[go.Indicator]:
-        pkw = r["p_batt_w"] / 1000.0
-        label, color = _flow_label(pkw)
-        return [
-            go.Indicator(mode="gauge+number", value=r["speed_kmh"], title={"text": "Speed (km/h)"},
-                         gauge={"axis": {"range": [0, vmax]}, "bar": {"color": C_SPEED}}),
-            go.Indicator(mode="gauge+number", value=r["soc_pct"], number={"valueformat": ".2f", "suffix": " %"},
-                         title={"text": "State of Charge"},
-                         gauge={"axis": {"range": [0, 100]}, "bar": {"color": C_REGEN},
-                                "steps": [{"range": [0, 20], "color": "#fde0dd"},
-                                          {"range": [90, 100], "color": "#fff7bc"}]}),
-            go.Indicator(mode="gauge+number", value=pkw, number={"valueformat": ".1f", "suffix": " kW"},
-                         title={"text": f"Power flow<br><span style='font-size:0.8em;color:{color}'>{label}</span>"},
-                         gauge={"axis": {"range": [p_lo, p_hi]}, "bar": {"color": color},
-                                "threshold": {"line": {"color": "black", "width": 2}, "value": 0}}),
-        ]
-
-    def table(r: pd.Series) -> go.Table:
-        units = [VSS_CATALOG[p].unit for p, _, _ in LIVE_SIGNALS]
-        names = [p + (" (custom)" if VSS_CATALOG[p].custom else "") for p, _, _ in LIVE_SIGNALS]
-        return go.Table(header={"values": [f"<b>VSS signal @ t = {r['t_s']:.0f} s</b>", "<b>Value</b>", "<b>Unit</b>"],
-                                "align": "left", "fill_color": "#2c3e50", "font": {"color": "white"}},
-                        cells={"values": [names, _live_values(r), units], "align": "left", "height": 22,
-                               "fill_color": "#f4f6f9", "font": {"color": "#111111"}},
-                        columnwidth=[3.2, 1, 0.6])
-
-    first = df.iloc[0]
-    for i, g in enumerate(gauges(first)):
-        fig.add_trace(g, row=1, col=i + 1)
-    fig.add_trace(table(first), row=2, col=1)
-
-    frames = [go.Frame(name=str(int(df.iloc[k]["t_s"])), data=[*gauges(df.iloc[k]), table(df.iloc[k])],
-                       traces=[0, 1, 2, 3]) for k in idx]
-    fig.frames = frames
-    dur = max(30, int(stride * 1000 / speedup))
-    fig.update_layout(
-        height=720, margin={"t": 110, "b": 10, "l": 10, "r": 10}, showlegend=False,
-        updatemenus=[{
-            "type": "buttons", "direction": "left", "x": 0.0, "y": 1.17, "xanchor": "left", "yanchor": "top",
-            "bgcolor": "#eeeeee", "font": {"color": "#111111"}, "pad": {"t": 10},
-            "buttons": [
-                {"label": "▶ Play", "method": "animate",
-                 "args": [None, {"frame": {"duration": dur, "redraw": True}, "fromcurrent": True,
-                                 "transition": {"duration": 0}}]},
-                {"label": "⏸ Pause", "method": "animate",
-                 "args": [[None], {"frame": {"duration": 0, "redraw": False}, "mode": "immediate"}]},
-            ],
-        }],
-        sliders=[{
-            "active": 0, "x": 0.16, "len": 0.84, "y": 1.19, "yanchor": "top", "pad": {"t": 0},
-            "currentvalue": {"prefix": "t = ", "suffix": " s"},
-            "steps": [{"label": f.name, "method": "animate",
-                       "args": [[f.name], {"frame": {"duration": 0, "redraw": True}, "mode": "immediate"}]}
-                      for f in frames],
-        }],
-    )
-    return fig
-
-
 def trip_overview_figure(df: pd.DataFrame) -> go.Figure:
     """Static speed + SoC + regen-power overview shown under the animation."""
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     fig.add_trace(go.Scatter(x=df["t_s"], y=df["p_regen_batt_w"] / 1000.0, name="Regen power to battery (kW)",
                              fill="tozeroy", line={"color": C_REGEN, "width": 0.5}, opacity=0.5))
     fig.add_trace(go.Scatter(x=df["t_s"], y=df["speed_kmh"], name="Speed (km/h)", line={"color": C_SPEED}))
-    fig.add_trace(go.Scatter(x=df["t_s"], y=df["soc_pct"], name="SoC (%)", line={"color": "#e08214", "width": 2}),
+    fig.add_trace(go.Scatter(x=df["t_s"], y=df["soc_pct"], name="SoC (%)", line={"color": C_SOC, "width": 2}),
                   secondary_y=True)
     fig.update_layout(height=320, margin={"t": 30, "b": 10}, legend={"orientation": "h", "y": 1.15},
                       hovermode="x unified")
     fig.update_yaxes(title_text="km/h · kW", secondary_y=False)
-    fig.update_yaxes(title_text="SoC (%)", secondary_y=True)
+    fig.update_yaxes(title_text="SoC (%)", secondary_y=True, showgrid=False)
     fig.update_xaxes(title_text="Time (s)")
     return fig
 
 
-def tab_live(sim: dict[str, Any]) -> None:
+def tab_live(sim: dict[str, Any], cfg: dict[str, Any], kr: dict[str, float]) -> None:
     regen: SimulationResult = sim["regen"]
-    st.subheader("Live twin playback - regenerative-braking case")
-    c1, c2 = st.columns([3, 1])
-    speedup = c2.select_slider("Playback speed", [1, 2, 5, 10, 20, 50, 100], value=20,
-                               format_func=lambda x: f"{x}× real time")
-    c1.caption("Press ▶ Play inside the chart. Gauges, power-flow indicator and the VSS signal table update "
-               "every frame; drag the time slider to scrub. (Actual playback rate depends on your computer.)")
-    st.plotly_chart(live_figure(regen.df, speedup), width="stretch")
-    st.plotly_chart(trip_overview_figure(regen.df), width="stretch")
+    show_html(theme.section("Live digital twin", "Watch the energy move, second by second",
+                          "The car replays the simulated trip. Blue dots carry battery power to the wheels, green dots "
+                          "carry braking energy back into the battery and red glow is energy lost as brake heat. "
+                          "The battery race on the right compares the same trip with friction brakes only.",
+                          theme.REGEN))
+    energy_flow(regen, sim["friction"], cfg["vehicle"]["aux_power_w"] / 1000.0, kr["wh_per_km"])
+    st.plotly_chart(trip_overview_figure(regen.df), width="stretch", theme=None)
 
-    st.markdown("##### Signal bus snapshot (what an SDV app would read from the data broker)")
+    show_html(theme.section("Signal bus", "What an SDV app would read from the data broker",
+                          "Every simulation step publishes COVESA VSS signals on an in-memory pub/sub bus.", theme.VOLT))
     hist: pd.DataFrame = sim["bus_history"]
     stats = sim["bus_stats"]
     s1, s2, s3, s4 = st.columns(4)
@@ -361,7 +250,64 @@ def tab_live(sim: dict[str, Any]) -> None:
 
 
 # =============================================================================
-# Tab 2: SoC comparison
+# Tab 2: How regen works (animated explainer + blending playground)
+# =============================================================================
+def blend_preview(cfg: dict[str, Any], regen_inputs: dict[str, Any], v_kmh: float, p_req_kw: float,
+                  soc_pct: float, temp_c: float) -> tuple[BrakeContext, Any]:
+    """One braking instant evaluated with the real motor, battery and controller models."""
+    sim = Simulator(cfg, RegenParams.from_config(cfg, **regen_inputs), initial_soc_pct=soc_pct, ambient_temp_c=temp_c)
+    v = max(v_kmh / 3.6, 0.01)
+    p_req = p_req_kw * 1000.0
+    omega, torque_wheel_equiv = sim.dynamics.wheel_to_motor(v, -p_req / v)
+    eta_d = sim.vehicle_params.drivetrain_efficiency
+    eta_est = sim.motor.efficiency(abs(torque_wheel_equiv) * eta_d, omega, generating=True)
+    ctx = BrakeContext(p_request_w=p_req, speed_mps=v, mass_kg=sim.vehicle_params.mass_kg,
+                       motor_limit_w=sim.motor.max_power_w(omega) / eta_d,
+                       battery_limit_w=sim.battery.max_charge_power_w() / (eta_d * eta_est) if eta_est > 0 else 0.0,
+                       battery_reason=sim.battery.charge_limit_reason())
+    return ctx, sim.controller.split(ctx)
+
+
+def tab_how(cfg: dict[str, Any], regen_inputs: dict[str, Any], sim_inputs: dict[str, Any]) -> None:
+    show_html(theme.section("Concept in 30 seconds", "How regenerative braking works",
+                          "Four short animated steps. They play automatically; click a step to jump to it.", theme.DRIVE))
+    regen_explainer()
+
+    show_html(theme.section("Try it yourself", "Regen blending playground",
+                          "Set up one braking moment. The real controller from the simulation decides how much the "
+                          "motor can recover and how much the friction brakes must burn. Uses the strategy chosen "
+                          "in the sidebar.", theme.VOLT))
+    c1, c2, c3, c4 = st.columns(4)
+    v = c1.slider("Vehicle speed (km/h)", 0, 130, 50, key="pg_v")
+    p = c2.slider("Braking power requested (kW)", 1, 120, 30, key="pg_p",
+                  help="Gentle stop ≈ 10–20 kW, firm stop ≈ 40–60 kW, emergency stop ≈ 100 kW+")
+    soc = c3.slider("Battery level (%)", 0, 100, int(sim_inputs["initial_soc"]), key="pg_soc")
+    temp = c4.slider("Battery temperature (°C)", -20, 50, int(sim_inputs["temp"]), key="pg_t")
+    ctx, split = blend_preview(cfg, regen_inputs, v, p, soc, temp)
+    fade = split.fade_factor
+    limits = [("Motor generating limit", ctx.motor_limit_w / 1000.0),
+              (f"Battery acceptance ({ctx.battery_reason.lower()})", ctx.battery_limit_w / 1000.0),
+              ("Strategy limit", split.strategy_limit_w / 1000.0)]
+    winner_name, _ = min(limits, key=lambda kv: kv[1])
+    regen_kw, fric_kw = split.p_regen_w / 1000.0, split.p_friction_w / 1000.0
+    reason_text = {
+        "Full regen": "the motor can absorb everything, so <b>no energy is wasted</b>.",
+        "Low-speed fade": f"at {v} km/h regen is faded to <b>{fade * 100:.0f} %</b>; the pads finish the stop.",
+        "Motor limit": "the <b>motor</b> is the bottleneck: it can't generate that much braking power at this speed.",
+        "Strategy limit": "the <b>strategy</b> chosen in the sidebar caps the regen share.",
+        "SoC limit": "the battery is nearly <b>full</b> and tapers its charging power.",
+        "Battery power limit": "the <b>battery</b> can't absorb charging power any faster.",
+        "Temperature derate": "the battery is too <b>cold/hot</b> to charge quickly.",
+        "Regen disabled": "regen is <b>switched off</b> by the selected level.",
+    }.get(split.reason, split.reason)
+    verdict = (f"Motor recovers <b>{regen_kw:.1f} kW</b> ({100 * regen_kw / p:.0f} %), friction brakes burn "
+               f"<b>{fric_kw:.1f} kW</b>. Why: {reason_text}")
+    show_html(theme.blend_bars_html(float(p), limits, winner_name if split.reason not in ("Full regen", "Low-speed fade")
+                                  else "", regen_kw, fric_kw, verdict))
+
+
+# =============================================================================
+# Tab 3: SoC comparison
 # =============================================================================
 def tab_soc(sim: dict[str, Any]) -> go.Figure:
     regen: SimulationResult = sim["regen"]
@@ -388,18 +334,18 @@ def tab_soc(sim: dict[str, Any]) -> go.Figure:
     fig.update_yaxes(title_text="km/h", row=3, col=1)
     fig.update_xaxes(title_text="Time (s)", row=3, col=1)
     fig.update_layout(height=720, legend={"orientation": "h", "y": 1.08}, hovermode="x unified")
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, width="stretch", theme=None)
 
     cum = make_subplots(specs=[[{"secondary_y": False}]])
     cum.add_trace(go.Scatter(x=regen.df["t_s"], y=regen.df["p_regen_batt_w"].cumsum() / 3600.0,
                              name="Energy recovered to battery (Wh)", line={"color": C_REGEN}))
     cum.add_trace(go.Scatter(x=regen.df["t_s"], y=regen.df["p_friction_w"].cumsum() / 3600.0,
-                             name="Friction heat · regen case (Wh)", line={"color": "#fdae61"}))
+                             name="Friction heat · regen case (Wh)", line={"color": theme.VOLT}))
     cum.add_trace(go.Scatter(x=fric.df["t_s"], y=fric.df["p_friction_w"].cumsum() / 3600.0,
                              name="Friction heat · friction-only (Wh)", line={"color": C_FRIC, "dash": "dash"}))
     cum.update_layout(title="Cumulative braking energy", height=380, yaxis_title="Wh", xaxis_title="Time (s)",
                       legend={"orientation": "h", "y": -0.25})
-    st.plotly_chart(cum, width="stretch")
+    st.plotly_chart(cum, width="stretch", theme=None)
     return fig
 
 
@@ -432,15 +378,15 @@ def sankey_figure(e: dict[str, float]) -> go.Figure:
     if e["kinetic_change_wh"] > 0.5:
         links.append(("Wheels (traction)", "Kinetic energy left", e["kinetic_change_wh"]))
     links = [(a, b, v) for a, b, v in links if v > 0.05]
-    colors = ["#4575b4", "#bbbbbb", "#bbbbbb", "#74add1", "#bbbbbb", "#313695", "#abd9e9", "#abd9e9",
-              "#abd9e9", C_FRIC, "#66bd63", "#bbbbbb", C_REGEN, "#abd9e9", "#abd9e9"]
+    colors = [theme.VOLT, "#4a5568", "#4a5568", C_SPEED, "#4a5568", "#1e6fa8", "#5b7a99", "#5b7a99",
+              "#5b7a99", C_FRIC, "#1fae78", "#4a5568", C_REGEN, "#5b7a99", "#5b7a99"]
     fig = go.Figure(go.Sankey(
         valueformat=".0f", valuesuffix=" Wh",
-        node={"label": nodes, "pad": 18, "thickness": 18, "color": colors},
+        node={"label": nodes, "pad": 18, "thickness": 18, "color": colors, "line": {"width": 0}},
         link={"source": [ix[a] for a, _, _ in links], "target": [ix[b] for _, b, _ in links],
               "value": [v for _, _, v in links],
-              "color": ["rgba(26,152,80,0.35)" if "Regen" in a or "Recovered" in b or "Regen" in b
-                        else "rgba(215,48,39,0.30)" if "Friction" in b else "rgba(150,150,150,0.25)"
+              "color": ["rgba(46,229,157,0.35)" if "Regen" in a or "Recovered" in b or "Regen" in b
+                        else "rgba(255,93,93,0.35)" if "Friction" in b else "rgba(138,151,171,0.18)"
                         for a, b, _ in links]},
     ))
     fig.update_layout(height=520, margin={"t": 30, "b": 10})
@@ -449,9 +395,10 @@ def sankey_figure(e: dict[str, float]) -> go.Figure:
 
 def tab_energy(sim: dict[str, Any], cfg: dict[str, Any]) -> go.Figure:
     er, ef = energy_totals(sim["regen"]), energy_totals(sim["friction"])
-    st.subheader("Where does the energy go? (regenerative case)")
-    st.caption("All values in Wh over the whole drive. Green = recovered energy, red = wasted as brake heat.")
-    st.plotly_chart(sankey_figure(er), width="stretch")
+    show_html(theme.section("Energy breakdown", "Where does every watt-hour go?",
+                          "Regenerative case, whole drive, in Wh. Green = recovered into the battery, "
+                          "red = wasted as brake heat, grey = unavoidable losses.", C_REGEN))
+    st.plotly_chart(sankey_figure(er), width="stretch", theme=None)
 
     cats = [("Net battery energy", "batt_net_wh"), ("Recovered by regen", "regen_batt_wh"),
             ("Friction-brake heat", "friction_wh"), ("Aerodynamic drag", "aero_wh"), ("Rolling", "rolling_wh"),
@@ -463,14 +410,14 @@ def tab_energy(sim: dict[str, Any], cfg: dict[str, Any]) -> go.Figure:
     ])
     bars.update_layout(barmode="group", height=420, yaxis_title="Energy (Wh)", title="Energy categories: both cases",
                        legend={"orientation": "h", "y": 1.12})
-    st.plotly_chart(bars, width="stretch")
+    st.plotly_chart(bars, width="stretch", theme=None)
 
     c1, c2 = st.columns(2)
     reasons = sim["regen"].df.query("p_brake_req_w > 0")
     lost = (reasons["p_brake_req_w"] - reasons["p_regen_wheel_w"]).groupby(reasons["regen_reason"]).sum() / 3600
     pie = go.Figure(go.Pie(labels=lost.index, values=lost.values, hole=0.45))
     pie.update_layout(title="Braking energy NOT recovered, by limiting reason (Wh)", height=380)
-    c1.plotly_chart(pie, width="stretch")
+    c1.plotly_chart(pie, width="stretch", theme=None)
 
     motor = MotorModel(MotorParams.from_config(cfg))
     rpm, tq, eta = motor.efficiency_map()
@@ -483,7 +430,7 @@ def tab_energy(sim: dict[str, Any], cfg: dict[str, Any]) -> go.Figure:
                               name="Operating points (green = regen)"))
     emap.update_layout(title="Motor+inverter efficiency map with operating points", height=380,
                        xaxis_title="Motor speed (rpm)", yaxis_title="|Torque| (N·m)", showlegend=False)
-    c2.plotly_chart(emap, width="stretch")
+    c2.plotly_chart(emap, width="stretch", theme=None)
     return bars
 
 
@@ -495,7 +442,9 @@ def tab_events(sim: dict[str, Any]) -> None:
     if ev.empty:
         st.info("No braking events in this cycle.")
         return
-    st.subheader(f"{len(ev)} braking events")
+    show_html(theme.section("Braking events", f"{len(ev)} stops and slow-downs, one by one",
+                          "Each row is one continuous braking event: how much motion energy was available, how much "
+                          "came back, and which limit stopped regen from taking more.", C_FRIC))
     a, b, c, d = st.columns(4)
     a.metric("Kinetic energy available", f"{ev['kinetic_energy_wh'].sum():.0f} Wh")
     b.metric("Recovered to battery", f"{ev['recovered_wh'].sum():.0f} Wh")
@@ -518,7 +467,7 @@ def tab_events(sim: dict[str, Any]) -> None:
                                text=ev["regen_limited_by"], hovertemplate="v₀ %{x:.0f} km/h<br>%{y:.0f} %<br>%{text}"))
     fig.update_layout(title="Recovery % vs braking start speed (bubble = kinetic energy)", height=380,
                       xaxis_title="Speed at start of braking (km/h)", yaxis_title="Recovered / kinetic energy (%)")
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, width="stretch", theme=None)
     st.caption("Low-speed stops lose relatively more (fade + road loads eat the energy); very high SoC or cold "
                "batteries show 'SoC limit' / 'Temperature derate'.")
 
@@ -527,13 +476,16 @@ def tab_events(sim: dict[str, Any]) -> None:
 # Tab 5: OTA & twin sync
 # =============================================================================
 def tab_ota_twin(sim: dict[str, Any]) -> None:
-    st.subheader("Over-the-air (OTA) calibration update")
+    show_html(theme.section("Software-defined vehicle", "Over-the-air (OTA) calibration update",
+                          "A new regen calibration arrives mid-drive. The pipeline below replays what the car's OTA "
+                          "manager did with it.", C_OTA))
     ota = sim["ota"]
     if ota is None:
         st.info("Enable 'Run OTA update during the drive' in the sidebar.")
     else:
         res: SimulationResult = ota["result"]
         events = pd.DataFrame(ota["events"])
+        show_html(theme.ota_pipeline_html(ota["events"]))
         col_a, col_b = st.columns([2, 3])
         with col_a:
             st.markdown("**OTA event log**")
@@ -552,13 +504,13 @@ def tab_ota_twin(sim: dict[str, Any]) -> None:
             fig = go.Figure()
             fig.add_trace(go.Scatter(x=t_b, y=soc_b, name="Regen, no OTA", line={"color": C_REGEN}))
             fig.add_trace(go.Scatter(x=t_o, y=soc_o, name="Regen with OTA", line={"color": C_OTA, "dash": "dash"}))
-            colors = {"INSTALLED": C_OTA, "REJECTED": C_FRIC, "ROLLED_BACK": "#f46d43", "HEALTH_OK": "#999999"}
+            colors = {"INSTALLED": C_OTA, "REJECTED": C_FRIC, "ROLLED_BACK": theme.VOLT, "HEALTH_OK": theme.MUTED}
             for _, e in events[events["kind"] != "SCHEDULED"].iterrows():
                 fig.add_vline(x=e["t_s"], line_dash="dot", line_color=colors.get(e["kind"], "grey"),
                               annotation_text=f"{e['kind']} {e['version']}", annotation_textangle=-90)
             fig.update_layout(title="Before/after effect of the OTA update on SoC", height=420,
                               xaxis_title="Time (s)", yaxis_title="SoC (%)", legend={"orientation": "h", "y": -0.2})
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, width="stretch", theme=None)
             dsoc = res.final_soc_pct - sim["regen"].final_soc_pct
             st.metric("Final SoC effect of OTA", f"{res.final_soc_pct:.2f} %", f"{dsoc:+.3f} pp vs no OTA")
 
@@ -567,15 +519,17 @@ def tab_ota_twin(sim: dict[str, Any]) -> None:
                                   line={"color": C_OTA, "width": 3}))
         tl.update_layout(title="Running calibration version (Vehicle.Software.RegenCalibration.Version)",
                          height=220, xaxis_title="Time (s)", margin={"t": 40, "b": 30})
-        st.plotly_chart(tl, width="stretch")
+        st.plotly_chart(tl, width="stretch", theme=None)
 
     st.divider()
-    st.subheader("Digital-twin synchronisation: twin vs 'physical' vehicle")
+    show_html(theme.section("Digital twin", "Twin vs 'physical' vehicle synchronisation",
+                          "The twin only stays a twin if real measurements keep correcting it.", C_REGEN))
     twin: TwinSyncResult | None = sim["twin"]
     if twin is None:
         st.info("Enable 'Run twin vs physical vehicle' in the sidebar.")
         return
     m = twin.metrics
+    show_html(theme.twin_sync_html(m, twin.sync_period_s, twin.method))
     a, b, c, d = st.columns(4)
     a.metric("RMSE open-loop twin", f"{m['rmse_open_pct']:.3f} %")
     b.metric("RMSE corrected twin", f"{m['rmse_corrected_pct']:.3f} %",
@@ -587,9 +541,9 @@ def tab_ota_twin(sim: dict[str, Any]) -> None:
                         subplot_titles=("SoC", "Twin error vs physical truth (pp)"))
     meas = df.iloc[:: twin.sync_period_s]
     fig.add_trace(go.Scatter(x=meas["t_s"], y=meas["soc_measured_pct"], mode="markers", name="Measured (noisy)",
-                             marker={"size": 4, "color": "#999999"}), row=1, col=1)
+                             marker={"size": 4, "color": theme.MUTED}), row=1, col=1)
     fig.add_trace(go.Scatter(x=df["t_s"], y=df["soc_true_pct"], name="Physical vehicle (truth)",
-                             line={"color": "black", "width": 2}), row=1, col=1)
+                             line={"color": theme.TEXT, "width": 2}), row=1, col=1)
     fig.add_trace(go.Scatter(x=df["t_s"], y=df["soc_twin_open_pct"], name="Twin, open loop",
                              line={"color": C_FRIC, "dash": "dash"}), row=1, col=1)
     fig.add_trace(go.Scatter(x=df["t_s"], y=df["soc_twin_corrected_pct"], name=f"Twin, corrected ({twin.method})",
@@ -600,7 +554,7 @@ def tab_ota_twin(sim: dict[str, Any]) -> None:
                              line={"color": C_REGEN}, showlegend=False), row=2, col=1)
     fig.update_layout(height=620, legend={"orientation": "h", "y": 1.08}, hovermode="x unified")
     fig.update_xaxes(title_text="Time (s)", row=2, col=1)
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, width="stretch", theme=None)
     tw = load_config()["twin"]
     st.caption(f"Physical vehicle has hidden +{tw['mass_mismatch_pct']:.0f} % mass and +{tw['r0_mismatch_pct']:.0f} % "
                f"battery resistance; sensors add noise (SoC σ = {tw['soc_noise_std_pct']} %). The twin starts with a "
@@ -613,24 +567,29 @@ def tab_ota_twin(sim: dict[str, Any]) -> None:
 # =============================================================================
 BLOCK_DIAGRAM = """
 digraph G {
-  rankdir=LR; node [shape=box, style="rounded,filled", fillcolor="#eef3fb", fontname="Helvetica"];
-  cycle [label="Drive cycle\\nv(t)"]; dyn [label="Vehicle dynamics\\nF_roll+F_aero+F_grade+F_inertia"];
-  ctrl [label="Regen controller\\n(blending strategy)", fillcolor="#e5f5e0"];
-  motor [label="Motor + inverter\\nη(T, ω), limits"]; fric [label="Friction brakes\\n(heat)", fillcolor="#fde0dd"];
-  batt [label="Battery 1-RC ECM\\nOCV, R0, R1‖C1, SoC"];
-  bus [label="VSS signal bus\\n(pub/sub)", fillcolor="#fff7bc"]; ota [label="OTA manager\\nvalidate / rollback", fillcolor="#f2e5f7"];
-  twin [label="Twin sync\\nKalman blend", fillcolor="#f2e5f7"]; phys [label="Physical vehicle\\n(sensors + noise)", shape=component];
-  dash [label="Streamlit dashboard", shape=note];
-  cycle -> dyn -> ctrl [label="P_wheel"]; ctrl -> motor [label="P_regen / traction"]; ctrl -> fric [label="P_friction"];
-  motor -> batt [label="P_batt"]; batt -> ctrl [label="charge limit", style=dashed];
-  batt -> bus; motor -> bus; ctrl -> bus; bus -> dash; ota -> ctrl [label="new calibration"];
+  rankdir=LR; bgcolor="transparent"; pad=0.2;
+  node [shape=box, style="rounded,filled", fillcolor="#162031", color="#22304A", penwidth=1.5,
+        fontname="Helvetica", fontcolor="#E7ECF3", fontsize=11];
+  edge [color="#8A97AB", fontcolor="#8A97AB", fontname="Helvetica", fontsize=9, arrowsize=0.7];
+  cycle [label="Drive cycle\\nv(t)", color="#38BDF8"]; dyn [label="Vehicle dynamics\\nF_roll+F_aero+F_grade+F_inertia", color="#38BDF8"];
+  ctrl [label="Regen controller\\n(blending strategy)", color="#2EE59D", penwidth=2.5];
+  motor [label="Motor + inverter\\nη(T, ω), limits", color="#38BDF8"]; fric [label="Friction brakes\\n(heat)", color="#FF5D5D"];
+  batt [label="Battery 1-RC ECM\\nOCV, R0, R1‖C1, SoC", color="#FFB020"];
+  bus [label="VSS signal bus\\n(pub/sub)", color="#FFB020"]; ota [label="OTA manager\\nvalidate / rollback", color="#B18CFF"];
+  twin [label="Twin sync\\nKalman blend", color="#B18CFF"]; phys [label="Physical vehicle\\n(sensors + noise)", shape=component, color="#B18CFF"];
+  dash [label="Streamlit dashboard", shape=note, color="#8A97AB"];
+  cycle -> dyn -> ctrl [label="P_wheel"]; ctrl -> motor [label="P_regen / traction", color="#2EE59D"];
+  ctrl -> fric [label="P_friction", color="#FF5D5D"];
+  motor -> batt [label="P_batt", color="#2EE59D"]; batt -> ctrl [label="charge limit", style=dashed];
+  batt -> bus; motor -> bus; ctrl -> bus; bus -> dash; ota -> ctrl [label="new calibration", color="#B18CFF"];
   phys -> twin [label="measured SoC"]; twin -> batt [label="SoC correction", style=dashed]; twin -> dash;
 }
 """
 
 
 def tab_theory() -> None:
-    st.subheader("System block diagram")
+    show_html(theme.section("Theory", "System block diagram and equations", "How the modules connect, and the "
+                          "physics each one solves.", theme.DRIVE))
     st.graphviz_chart(BLOCK_DIAGRAM, width="stretch")
     c1, c2 = st.columns(2)
     with c1:
@@ -725,10 +684,9 @@ def main() -> None:
     cmp = compare_kpis(kr, kf)
     stats = cycle_stats(cycle)
 
-    st.title("EV Energy-Recovery Digital Twin")
-    st.caption(f"**{cycle_name}** · {stats['distance_km']:.2f} km · {stats['duration_s']:.0f} s · "
-               f"max {stats['max_speed_kmh']:.0f} km/h · mean {stats['mean_speed_kmh']:.1f} km/h · "
-               f"strategy: {STRATEGY_LABELS[regen_inputs['strategy']]} · vehicle: {cfg['vehicle']['name']}")
+    # CSS travels with the hero block: a style-only st.html goes to a hidden container and is dropped
+    show_html(theme.GLOBAL_CSS + theme.hero_html(cycle_name, stats, STRATEGY_LABELS[regen_inputs["strategy"]], cfg["vehicle"]["name"]))
+    show_html(theme.how_to_read_html())
     kpi_cards(kr, kf, cmp)
 
     items = sanity_check(kr, stats["mean_speed_kmh"], cfg, regen_inputs["strategy"])
@@ -753,21 +711,22 @@ def main() -> None:
         d1.download_button("⬇ Download CSV", csv_b, "ev_regen_results.csv", "text/csv")
         d2.download_button("⬇ Download PNG", png_b, "ev_regen_charts.png", "image/png")
 
-    tabs = st.tabs(["🚗 Live Twin", "📉 SoC Comparison", "⚡ Energy Breakdown", "🛑 Braking Events",
-                    "📡 OTA & Twin Sync", "📘 Theory"])
+    tabs = st.tabs(["🚗 Live Twin", "🎓 How Regen Works", "📉 SoC Comparison", "⚡ Energy Breakdown",
+                    "🛑 Braking Events", "📡 OTA & Twin Sync", "📘 Theory"])
     with tabs[0]:
-        tab_live(sim)
+        tab_live(sim, cfg, kr)
     with tabs[1]:
-        tab_soc(sim)
+        tab_how(cfg, regen_inputs, sim_inputs)
     with tabs[2]:
-        tab_energy(sim, cfg)
+        tab_soc(sim)
     with tabs[3]:
-        tab_events(sim)
+        tab_energy(sim, cfg)
     with tabs[4]:
-        tab_ota_twin(sim)
+        tab_events(sim)
     with tabs[5]:
+        tab_ota_twin(sim)
+    with tabs[6]:
         tab_theory()
-
 
 if __name__ == "__main__":
     main()
