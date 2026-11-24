@@ -4,6 +4,63 @@
 
 *Course project: Software Defined Vehicles (SDV)*
 
+**Live demo:** https://ev-regen-twin.streamlit.app  ·  **Source:** https://github.com/Rishabh327/ev-regen-twin
+
+---
+
+## Quick start
+
+### How to run
+
+You need **Python 3.10 or newer** (tested on 3.13). No internet APIs, accounts or hardware are needed.
+
+```bash
+cd ev_regen_twin
+python -m venv .venv
+.venv\Scripts\activate            # Windows  (Linux/macOS: source .venv/bin/activate)
+pip install -r requirements.txt
+streamlit run app.py              # dashboard opens at http://localhost:8501
+```
+
+Optional checks:
+
+```bash
+python run_cli.py                 # WLTP results + sanity check in the terminal
+python run_cli.py --all           # compare all five drive cycles
+python -m pytest -v               # 67 automated tests
+```
+
+### Libraries needed
+
+All are free, open-source and listed in [requirements.txt](requirements.txt); `pip install -r requirements.txt` installs them.
+
+| Library | Minimum version | Tested with | Used for |
+|---|---|---|---|
+| numpy | 1.24 | 2.5.4 | Numerical arrays, vehicle/battery maths |
+| pandas | 2.0 | 3.1.0 | Drive-cycle and result tables, CSV reading/writing |
+| streamlit | 1.66 | 1.66.1 | Web dashboard (sidebar, tabs, animations) |
+| plotly | 5.18 | 7.1.0 | Interactive charts, Sankey diagram, efficiency map |
+| matplotlib | 3.7 | 3.11.2 | PNG chart export |
+| pytest | 7.4 | 9.2.0 | Automated tests |
+
+Everything else (json, math, hashlib, dataclasses, pathlib, argparse) is in the Python standard library.
+
+### Sample data
+
+The [data/](data) folder holds five ready-to-use drive cycles at 1 s resolution. Every file has two columns, `time_s` (seconds) and `speed_kmh` (km/h).
+
+| File | Cycle | Duration | Distance | Max speed | Notes |
+|---|---|---|---|---|---|
+| [wltp_class3.csv](data/wltp_class3.csv) | WLTP Class 3b | 1800 s | 23.27 km | 131.3 km/h | Default cycle. Approximation fitted to official phase statistics |
+| [nedc.csv](data/nedc.csv) | NEDC (4×ECE-15 + EUDC) | 1180 s | 10.80 km | 120 km/h | Built from the exact regulation segments |
+| [udds.csv](data/udds.csv) | US EPA UDDS (FTP-72) | 1369 s | 11.99 km | 91.25 km/h | Approximation |
+| [midc.csv](data/midc.csv) | Indian MIDC | 1180 s | 10.33 km | 90 km/h | Approximation |
+| [city_stop_and_go.csv](data/city_stop_and_go.csv) | Custom city traffic | 600 s | 2.48 km | 40 km/h | Synthetic stop-and-go |
+
+The dashboard uses them automatically (sidebar → **Drive cycle**). Any of these files, or your own CSV in the same format, can also be loaded with **"Upload my own CSV…"**. Run `python -m core.drive_cycles` to regenerate them. All vehicle, battery and regen parameters are in [config/vehicle_default.json](config/vehicle_default.json).
+
+**Expected result** with the default settings (WLTP, 90 % start, 25 °C): final SoC **79.84 %** with regen vs **78.92 %** friction-only, **140.5 vs 153.6 Wh/km**, **+9.3 %** range. Full output is in [section 15](#15-sample-output-wltp-default-settings).
+
 ---
 
 ## Table of contents
